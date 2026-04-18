@@ -59,7 +59,7 @@
         let selectedBlockType = TYPES.SOLID;
         let needsRedstoneUpdate = false;
 
-        // --- GENERADOR DE TEXTURAS (CANVAS 16x16) ---
+        // --- GENERADOR DE TEXTURAS ESTILO MINECRAFT EXACTO (16x16) ---
         function createTexture(drawFunc) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
@@ -71,17 +71,161 @@
             return tex;
         }
 
+        // Función auxiliar para pintar múltiples píxeles de un color específico
+        const drawPixels = (ctx, color, coords) => {
+            ctx.fillStyle = color;
+            coords.forEach(p => ctx.fillRect(p[0], p[1], 1, 1));
+        };
+
         const textures = {
-            solid: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#777'; for(let i=0;i<20;i++) ctx.fillRect(Math.random()*14, Math.random()*14, 2, 2); }),
-            glass: createTexture(ctx => { ctx.fillStyle = 'rgba(200, 230, 255, 0.3)'; ctx.fillRect(0,0,16,16); ctx.strokeStyle = '#aaddff'; ctx.lineWidth = 1; ctx.strokeRect(0.5,0.5,15,15); ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(8,16); ctx.stroke(); }),
-            dust_off: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#300'; ctx.fillRect(2,7,12,2); ctx.fillRect(7,2,2,12); }),
-            dust_on: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#f00'; ctx.fillRect(2,7,12,2); ctx.fillRect(7,2,2,12); ctx.fillStyle = '#f55'; ctx.fillRect(7,7,2,2); }),
-            torch_off: createTexture(ctx => { ctx.fillStyle = '#654'; ctx.fillRect(7,4,2,12); ctx.fillStyle = '#500'; ctx.fillRect(6,2,4,4); }),
-            torch_on: createTexture(ctx => { ctx.fillStyle = '#654'; ctx.fillRect(7,4,2,12); ctx.fillStyle = '#f00'; ctx.fillRect(6,2,4,4); ctx.fillStyle = '#f55'; ctx.fillRect(7,3,2,2); }),
-            lamp_off: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#555'; ctx.fillRect(4,4,8,8); }),
-            lamp_on: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#ffdd44'; ctx.fillRect(4,4,8,8); ctx.fillStyle = '#ffffaa'; ctx.fillRect(6,6,4,4); }),
-            lever_off: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#654'; ctx.fillRect(7,8,2,8); ctx.fillStyle = '#888'; ctx.fillRect(6,6,4,4); }),
-            lever_on: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#654'; ctx.fillRect(7,8,2,4); ctx.fillRect(11,6,4,2); ctx.fillStyle = '#888'; ctx.fillRect(6,6,4,4); })
+            solid: createTexture(ctx => {
+                // Base de piedra
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                // Vetas oscuras (Patrón fiel a la textura default de Minecraft)
+                drawPixels(ctx, '#707070', [
+                    [7,0],[3,1],[4,1],[12,1],[3,2],[4,2],[8,2],[12,2],
+                    [4,3],[8,3],[11,3],[12,3],[12,4],[13,4],[1,5],[7,5],
+                    [1,6],[2,6],[7,6],[8,6],[8,7],[9,7],[10,7],
+                    [3,9],[8,9],[9,9],[10,9],[4,10],[5,10],[12,10],
+                    [5,11],[6,11],[12,11],[7,12],[8,12],[1,13],[2,13],
+                    [9,13],[2,14],[3,14],[9,14],[10,14],[11,14],[12,15],[13,15]
+                ]);
+                // Vetas claras
+                drawPixels(ctx, '#9a9a9a', [
+                    [8,2],[8,3],[13,7],[13,8],[4,10],[4,11],[13,12]
+                ]);
+            }),
+            
+            glass: createTexture(ctx => {
+                ctx.clearRect(0,0,16,16); // Fondo transparente
+                // Bordes del marco
+                ctx.fillStyle = 'rgba(180, 210, 240, 0.6)';
+                ctx.fillRect(0,0,16,1); ctx.fillRect(0,15,16,1); // Arriba/Abajo
+                ctx.fillRect(0,0,1,16); ctx.fillRect(15,0,1,16); // Izq/Der
+                // Cruz central
+                ctx.fillStyle = 'rgba(200, 230, 255, 0.4)';
+                ctx.fillRect(7,0,2,16); ctx.fillRect(0,7,16,2);
+                // Brillo de cristal
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.fillRect(2,2,4,4);
+            }),
+
+            dust_off: createTexture(ctx => {
+                // Fondo de piedra
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
+                drawPixels(ctx, '#9a9a9a', [[8,2],[4,10]]);
+                // Polvo de redstone apagado (Cruz en el centro)
+                ctx.fillStyle = '#4a0000';
+                for(let x=6; x<=9; x++) { ctx.fillRect(x, 6, 1, 1); ctx.fillRect(x, 9, 1, 1); }
+                for(let y=6; y<=9; y++) { ctx.fillRect(6, y, 1, 1); ctx.fillRect(9, y, 1, 1); }
+                ctx.fillStyle = '#200000';
+                ctx.fillRect(7,7,2,2);
+            }),
+
+            dust_on: createTexture(ctx => {
+                // Fondo de piedra
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
+                drawPixels(ctx, '#9a9a9a', [[8,2],[4,10]]);
+                // Polvo de redstone encendido
+                ctx.fillStyle = '#ff0000';
+                for(let x=6; x<=9; x++) { ctx.fillRect(x, 6, 1, 1); ctx.fillRect(x, 9, 1, 1); }
+                for(let y=6; y<=9; y++) { ctx.fillRect(6, y, 1, 1); ctx.fillRect(9, y, 1, 1); }
+                ctx.fillStyle = '#ff4444';
+                ctx.fillRect(7,7,2,2);
+                // Resplandor en la piedra de alrededor
+                ctx.fillStyle = '#aa6666';
+                ctx.fillRect(5,7,1,1); ctx.fillRect(10,7,1,1); ctx.fillRect(7,5,1,1); ctx.fillRect(7,10,1,1);
+            }),
+
+            torch_off: createTexture(ctx => {
+                ctx.clearRect(0,0,16,16); // Transparente
+                // Palo de madera
+                ctx.fillStyle = '#5a3a1a';
+                ctx.fillRect(7,6,2,10);
+                ctx.fillStyle = '#4a2a10';
+                ctx.fillRect(7,8,1,6);
+                // Cabeza de redstone apagada
+                ctx.fillStyle = '#3a0000';
+                ctx.fillRect(6,4,4,2);
+                ctx.fillStyle = '#200000';
+                ctx.fillRect(7,4,2,1);
+            }),
+
+            torch_on: createTexture(ctx => {
+                ctx.clearRect(0,0,16,16); // Transparente
+                // Palo de madera
+                ctx.fillStyle = '#5a3a1a';
+                ctx.fillRect(7,6,2,10);
+                ctx.fillStyle = '#4a2a10';
+                ctx.fillRect(7,8,1,6);
+                // Cabeza de redstone encendida
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(6,4,4,2);
+                ctx.fillStyle = '#ff4444';
+                ctx.fillRect(7,4,2,1);
+                // Brillo de antorcha
+                ctx.fillStyle = 'rgba(255, 50, 50, 0.4)';
+                ctx.fillRect(5,3,6,4);
+            }),
+
+            lamp_off: createTexture(ctx => {
+                // Base de piedra
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
+                // Rejilla interior oscura
+                ctx.fillStyle = '#404040';
+                ctx.fillRect(4,4,8,8);
+                ctx.fillStyle = '#505050';
+                ctx.fillRect(5,5,6,6);
+                ctx.fillStyle = '#404040';
+                ctx.fillRect(7,7,2,2);
+            }),
+
+            lamp_on: createTexture(ctx => {
+                // Base de piedra
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
+                // Rejilla interior brillante
+                ctx.fillStyle = '#b8860b'; // Borde dorado oscuro
+                ctx.fillRect(4,4,8,8);
+                ctx.fillStyle = '#ffcc00'; // Interior amarillo
+                ctx.fillRect(5,5,6,6);
+                ctx.fillStyle = '#ffffaa'; // Núcleo cegador
+                ctx.fillRect(7,7,2,2);
+            }),
+
+            lever_off: createTexture(ctx => {
+                // Base de piedra
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
+                // Palanca apagada (hacia arriba)
+                ctx.fillStyle = '#505050';
+                ctx.fillRect(7,3,2,11);
+                ctx.fillStyle = '#303030';
+                ctx.fillRect(7,2,2,1); // Mango
+                // Base de soporte
+                ctx.fillStyle = '#606060';
+                ctx.fillRect(6,14,4,2);
+            }),
+
+            lever_on: createTexture(ctx => {
+                // Base de piedra
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
+                // Palanca encendida (hacia un lado)
+                ctx.fillStyle = '#505050';
+                ctx.fillRect(7,7,7,2);
+                ctx.fillStyle = '#303030';
+                ctx.fillRect(14,7,1,2); // Mango
+                // Base de soporte
+                ctx.fillStyle = '#606060';
+                ctx.fillRect(6,14,4,2);
+                // Indicador rojo de encendido en la base
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(7,13,2,1);
+            })
         };
 
         const materials = {
@@ -89,8 +233,8 @@
             [TYPES.GLASS]: new THREE.MeshLambertMaterial({ map: textures.glass, transparent: true, opacity: 0.5 }),
             [TYPES.DUST_OFF]: new THREE.MeshLambertMaterial({ map: textures.dust_off }),
             [TYPES.DUST_ON]: new THREE.MeshBasicMaterial({ map: textures.dust_on }), // Emissive fake
-            [TYPES.TORCH_OFF]: new THREE.MeshLambertMaterial({ map: textures.torch_off }),
-            [TYPES.TORCH_ON]: new THREE.MeshBasicMaterial({ map: textures.torch_on }),
+            [TYPES.TORCH_OFF]: new THREE.MeshLambertMaterial({ map: textures.torch_off, transparent: true, alphaTest: 0.1 }),
+            [TYPES.TORCH_ON]: new THREE.MeshBasicMaterial({ map: textures.torch_on, transparent: true, alphaTest: 0.1 }),
             [TYPES.LAMP_OFF]: new THREE.MeshLambertMaterial({ map: textures.lamp_off }),
             [TYPES.LAMP_ON]: new THREE.MeshBasicMaterial({ map: textures.lamp_on }),
             [TYPES.LEVER_OFF]: new THREE.MeshLambertMaterial({ map: textures.lever_off }),
@@ -98,7 +242,6 @@
         };
 
         // --- LÓGICA DEL MUNDO (VOXELS) ---
-        // Grid[Y][X][Z]
         let grid = new Array(WORLD_SIZE).fill(null).map(() => 
             new Array(WORLD_SIZE).fill(null).map(() => 
                 new Array(WORLD_SIZE).fill(TYPES.AIR)
@@ -110,7 +253,6 @@
             )
         );
 
-        // Inicializar suelo
         for(let x=0; x<WORLD_SIZE; x++) for(let z=0; z<WORLD_SIZE; z++) grid[0][x][z] = TYPES.SOLID;
 
         function getBlock(x,y,z) {
@@ -127,12 +269,9 @@
 
         // --- LÓGICA REDSTONE (BFS) ---
         function updateRedstone() {
-            // Resetear potencia
             for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) powerGrid[y][x][z] = 0;
-
             let queue = [];
 
-            // 1. Buscar fuentes primarias (Palancas encendidas)
             for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
                 if(grid[y][x][z] === TYPES.LEVER_ON) {
                     powerGrid[y][x][z] = 15;
@@ -140,40 +279,28 @@
                 }
             }
 
-            // 2. Propagar señal (BFS)
             while(queue.length > 0) {
                 const curr = queue.shift();
-                const dirs = [[1,0],[0,1],[-1,0],[0,-1],[0,0,1],[0,0,-1]]; // x, z, y offsets
-                // Corrección de direcciones
                 const neighbors = [
-                    {x: curr.x+1, y: curr.y, z: curr.z},
-                    {x: curr.x-1, y: curr.y, z: curr.z},
-                    {x: curr.x, y: curr.y+1, z: curr.z},
-                    {x: curr.x, y: curr.y-1, z: curr.z},
-                    {x: curr.x, y: curr.y, z: curr.z+1},
-                    {x: curr.x, y: curr.y, z: curr.z-1}
+                    {x: curr.x+1, y: curr.y, z: curr.z}, {x: curr.x-1, y: curr.y, z: curr.z},
+                    {x: curr.x, y: curr.y+1, z: curr.z}, {x: curr.x, y: curr.y-1, z: curr.z},
+                    {x: curr.x, y: curr.y, z: curr.z+1}, {x: curr.x, y: curr.y, z: curr.z-1}
                 ];
 
                 for(let n of neighbors) {
                     let type = getBlock(n.x, n.y, n.z);
-                    if(type === TYPES.AIR || type === TYPES.GLASS) continue; // El vidrio aísla
+                    if(type === TYPES.AIR || type === TYPES.GLASS) continue;
 
                     let newPower = 0;
-                    // La señal baja al pasar por polvo, se mantiene en sólidos
                     if(type === TYPES.DUST_OFF || type === TYPES.DUST_ON) {
                         newPower = curr.p - 1;
                     } else if(type === TYPES.SOLID || type === TYPES.LEVER_OFF || type === TYPES.LEVER_ON || type === TYPES.LAMP_OFF || type === TYPES.LAMP_ON) {
                         newPower = curr.p;
                     } else if(type === TYPES.TORCH_OFF) {
-                        // Lógica de antorcha: se apaga si el bloque que la sostiene tiene señal
-                        // Asumimos que la antorcha está sobre (y-1)
-                        if(curr.y === n.y - 1 && curr.p > 0) {
-                            newPower = 0; // Forzar apagado
-                        } else {
-                            continue; // No propagar a través de antorchas apagadas
-                        }
+                        if(curr.y === n.y - 1 && curr.p > 0) newPower = 0; 
+                        else continue;
                     } else if(type === TYPES.TORCH_ON) {
-                        continue; // No propagar hacia una antorcha encendida
+                        continue;
                     }
 
                     if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
@@ -183,29 +310,24 @@
                 }
             }
 
-            // 3. Actualizar estados de los bloques basados en powerGrid
             for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
                 let p = powerGrid[y][x][z];
                 let type = grid[y][x][z];
                 
                 if(type === TYPES.DUST_OFF && p > 0) grid[y][x][z] = TYPES.DUST_ON;
                 if(type === TYPES.DUST_ON && p === 0) grid[y][x][z] = TYPES.DUST_OFF;
-                
                 if(type === TYPES.LAMP_OFF && p > 0) grid[y][x][z] = TYPES.LAMP_ON;
                 if(type === TYPES.LAMP_ON && p === 0) grid[y][x][z] = TYPES.LAMP_OFF;
 
-                // Lógica especial Antorcha: Si el bloque de abajo está alimentado, se apaga.
                 if(type === TYPES.TORCH_ON && getBlock(x, y-1, z) !== TYPES.AIR && powerGrid[y-1][x][z] > 0) {
                     grid[y][x][z] = TYPES.TORCH_OFF;
                 } else if(type === TYPES.TORCH_OFF && (getBlock(x, y-1, z) === TYPES.AIR || powerGrid[y-1][x][z] === 0)) {
                     grid[y][x][z] = TYPES.TORCH_ON;
-                    // Propagar señal desde la antorcha recién encendida
                     powerGrid[y][x][z] = 15;
                     queue.push({x,y,z,p:15});
                 }
             }
 
-            // Si se encendieron antorchas, volver a propagar para actualizar lo que depende de ellas
             if(queue.length > 0) {
                 while(queue.length > 0) {
                     const curr = queue.shift();
@@ -238,7 +360,7 @@
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.set(8, 3, 8);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: false }); // antialias false para look voxel
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
@@ -247,18 +369,16 @@
         scene.add(light);
         scene.add(new THREE.AmbientLight(0x404040));
 
-        // --- MESHING (Instanced Meshes para rendimiento) ---
+        // --- MESHING ---
         const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         const meshes = {};
 
         function buildMeshes() {
-            // Limpiar meshes viejos
             for(let key in meshes) {
                 scene.remove(meshes[key]);
                 meshes[key].dispose();
             }
 
-            // Agrupar bloques por tipo
             const counts = {};
             const positions = {};
 
@@ -268,7 +388,6 @@
                         let type = grid[y][x][z];
                         if(type === TYPES.AIR) continue;
 
-                        // Simple Culling: no renderizar si está completamente rodeado de sólidos/no transparentes
                         let neighbors = [
                             getBlock(x+1,y,z), getBlock(x-1,y,z),
                             getBlock(x,y+1,z), getBlock(x,y-1,z),
@@ -284,7 +403,6 @@
                 }
             }
 
-            // Crear InstancedMeshes
             const dummy = new THREE.Object3D();
             for(let type in counts) {
                 let mesh = new THREE.InstancedMesh(blockGeo, materials[type], counts[type]);
@@ -334,7 +452,6 @@
         const typesMap = ['solid', 'glass', 'dust_off', 'torch_off', 'lamp_off', 'lever_off'];
         const idToType = { solid: TYPES.SOLID, glass: TYPES.GLASS, dust_off: TYPES.DUST_OFF, torch_off: TYPES.TORCH_OFF, lamp_off: TYPES.LAMP_OFF, lever_off: TYPES.LEVER_OFF };
 
-        // Rellenar iconos del hotbar con canvas
         slots.forEach((slot, i) => {
             let tex = textures[typesMap[i]];
             let img = document.createElement('img');
@@ -359,7 +476,7 @@
             if(num >= 1 && num <= 6) updateHotbar(num - 1);
         });
 
-        // --- RAYCASTING (Colocar/Romper) ---
+        // --- RAYCASTING ---
         const raycaster = new THREE.Raycaster();
         raycaster.far = 8;
         const center = new THREE.Vector2(0, 0);
@@ -377,19 +494,18 @@
                 const by = Math.floor(pos.y);
                 const bz = Math.floor(pos.z);
 
-                if (e.button === 0) { // Romper
+                if (e.button === 0) {
                     if(getBlock(bx, by, bz) !== TYPES.AIR) {
                         grid[by][bx][bz] = TYPES.AIR;
                         needsRedstoneUpdate = true;
                         buildMeshes();
                     }
-                } else if (e.button === 2) { // Colocar
+                } else if (e.button === 2) {
                     const placePos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(0.5));
                     const px = Math.floor(placePos.x);
                     const py = Math.floor(placePos.y);
                     const pz = Math.floor(placePos.z);
 
-                    // Evitar colocar dentro del jugador
                     const playerMinX = camera.position.x - 0.3;
                     const playerMaxX = camera.position.x + 0.3;
                     const playerMinY = camera.position.y - 1.5;
@@ -402,7 +518,6 @@
                         pz+1 > playerMinZ && pz < playerMaxZ) return;
 
                     if(getBlock(px, py, pz) === TYPES.AIR) {
-                        // Lógica especial para palanca (clic derecho cambia estado si ya existe)
                         if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_OFF) {
                             grid[by][bx][bz] = TYPES.LEVER_ON;
                         } else if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_ON) {
@@ -419,12 +534,11 @@
 
         document.addEventListener('contextmenu', e => e.preventDefault());
 
-        // --- FÍSICAS BÁSICAS Y LOOP ---
+        // --- FÍSICAS Y LOOP ---
         const clock = new THREE.Clock();
         let canJump = true;
 
         function checkCollision(x, y, z) {
-            // Revisa si un punto choca con un bloque sólido (jugador mide ~0.6x1.8x0.6)
             const margin = 0.3;
             const height = 1.6;
             for(let dy = 0; dy <= height; dy += 0.5) {
@@ -446,7 +560,6 @@
             }
 
             if (isLocked) {
-                // Movimiento
                 velocity.x *= 0.8; velocity.z *= 0.8;
                 direction.z = Number(keys.w) - Number(keys.s);
                 direction.x = Number(keys.d) - Number(keys.a);
@@ -461,33 +574,26 @@
                 velocity.x += (forward.x * direction.z + right.x * direction.x) * speed * delta;
                 velocity.z += (forward.z * direction.z + right.z * direction.x) * speed * delta;
 
-                // Gravedad
                 velocity.y -= 20 * delta;
                 if(keys.space && canJump) { velocity.y = 8; canJump = false; }
 
-                // Eje X
                 let nextX = camera.position.x + velocity.x * delta;
-                if(!checkCollision(nextX, camera.position.y - 1.5, camera.position.z)) {
-                    camera.position.x = nextX;
-                } else { velocity.x = 0; }
+                if(!checkCollision(nextX, camera.position.y - 1.5, camera.position.z)) camera.position.x = nextX;
+                else velocity.x = 0;
 
-                // Eje Z
                 let nextZ = camera.position.z + velocity.z * delta;
-                if(!checkCollision(camera.position.x, camera.position.y - 1.5, nextZ)) {
-                    camera.position.z = nextZ;
-                } else { velocity.z = 0; }
+                if(!checkCollision(camera.position.x, camera.position.y - 1.5, nextZ)) camera.position.z = nextZ;
+                else velocity.z = 0;
 
-                // Eje Y
                 let nextY = camera.position.y + velocity.y * delta;
                 if(!checkCollision(camera.position.x, nextY - 1.5, camera.position.z)) {
                     camera.position.y = nextY;
                     canJump = false;
                 } else {
-                    if(velocity.y < 0) canJump = true; // Toca el suelo
+                    if(velocity.y < 0) canJump = true;
                     velocity.y = 0;
                 }
 
-                // Limitar mundo
                 camera.position.x = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.x));
                 camera.position.z = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.z));
                 if(camera.position.y < 1.5) { camera.position.y = 1.5; velocity.y = 0; canJump = true; }
