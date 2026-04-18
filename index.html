@@ -22,7 +22,7 @@
         <div id="crosshair">+</div>
         <div id="instructions">
             <h1>Redstone Sandbox</h1>
-            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar | Shift: Bajar<br>Clic Izq: Romper | Clic Der: Poner<br>Rueda/Teclas 1-6: Seleccionar</p>
+            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar<br>Clic Izq: Romper | Clic Der: Poner<br>Rueda/Teclas 1-6: Seleccionar</p>
         </div>
         <div id="hotbar">
             <div class="slot active" data-id="solid"><span>1</span></div>
@@ -44,22 +44,25 @@
     </script>
     <script type="module">
         import * as THREE from 'three';
+        import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
         // --- CONSTANTES Y CONFIGURACIÓN ---
         const BLOCK_SIZE = 1;
         const WORLD_SIZE = 16;
         const TYPES = {
-            AIR: 0, SOLID: 1, GLASS: 2, 
-            DUST_OFF: 3, DUST_ON: 4, 
-            TORCH_OFF: 5, TORCH_ON: 6, 
-            LAMP_OFF: 7, LAMP_ON: 8, 
-            LEVER_OFF: 9, LEVER_ON: 10
+            AIR: 0, GRASS: 1, SOLID: 2, GLASS: 3, 
+            DUST_OFF: 4, DUST_ON: 5, 
+            TORCH_OFF: 6, TORCH_ON: 7, 
+            LAMP_OFF: 8, LAMP_ON: 9, 
+            LEVER_OFF: 10, LEVER_ON: 11
         };
 
         let selectedBlockType = TYPES.SOLID;
         let needsRedstoneUpdate = false;
+        let lookAtBlock = null; // {x,y,z}
+        let lookAtNormal = null; // {x,y,z}
 
-        // --- GENERADOR DE TEXTURAS ESTILO MINECRAFT EXACTO (16x16) ---
+        // --- GENERADOR DE TEXTURAS ---
         function createTexture(drawFunc) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
@@ -71,189 +74,192 @@
             return tex;
         }
 
-        // Función auxiliar para pintar múltiples píxeles de un color específico
         const drawPixels = (ctx, color, coords) => {
             ctx.fillStyle = color;
             coords.forEach(p => ctx.fillRect(p[0], p[1], 1, 1));
         };
 
         const textures = {
-            solid: createTexture(ctx => {
-                // Base de piedra
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                // Vetas oscuras (Patrón fiel a la textura default de Minecraft)
-                drawPixels(ctx, '#707070', [
-                    [7,0],[3,1],[4,1],[12,1],[3,2],[4,2],[8,2],[12,2],
-                    [4,3],[8,3],[11,3],[12,3],[12,4],[13,4],[1,5],[7,5],
-                    [1,6],[2,6],[7,6],[8,6],[8,7],[9,7],[10,7],
-                    [3,9],[8,9],[9,9],[10,9],[4,10],[5,10],[12,10],
-                    [5,11],[6,11],[12,11],[7,12],[8,12],[1,13],[2,13],
-                    [9,13],[2,14],[3,14],[9,14],[10,14],[11,14],[12,15],[13,15]
-                ]);
-                // Vetas claras
-                drawPixels(ctx, '#9a9a9a', [
-                    [8,2],[8,3],[13,7],[13,8],[4,10],[4,11],[13,12]
-                ]);
+            grass_top: createTexture(ctx => {
+                ctx.fillStyle = '#5da83a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#4d8a30', [[2,1],[5,3],[8,2],[11,4],[14,1],[1,6],[4,8],[7,7],[10,9],[13,6],[2,11],[5,13],[8,12],[11,14],[14,11],[3,15],[9,15]]);
+                drawPixels(ctx, '#6db84a', [[1,2],[6,1],[12,3],[0,8],[6,10],[13,12],[2,14],[8,9]]);
             }),
-            
+            grass_side: createTexture(ctx => {
+                ctx.fillStyle = '#866043'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#7a5638', [[2,4],[5,6],[8,5],[12,7],[14,9],[1,10],[6,12],[10,11],[13,14],[3,15]]);
+                ctx.fillStyle = '#5da83a'; ctx.fillRect(0,0,16,3);
+                ctx.fillStyle = '#4d8a30'; ctx.fillRect(0,3,16,1);
+                ctx.fillStyle = '#5da83a';
+                ctx.fillRect(1,3,1,1); ctx.fillRect(4,3,1,2); ctx.fillRect(8,3,1,1); ctx.fillRect(11,3,1,2); ctx.fillRect(14,3,1,1);
+            }),
+            dirt: createTexture(ctx => {
+                ctx.fillStyle = '#866043'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#7a5638', [[1,1],[4,3],[7,2],[10,4],[13,1],[0,6],[3,8],[6,7],[9,9],[12,6],[1,11],[4,13],[7,12],[10,14],[13,11],[2,15],[8,15]]);
+                drawPixels(ctx, '#926d50', [[2,0],[5,2],[8,1],[11,3],[14,0],[1,5],[4,7],[7,6],[10,8],[13,5]]);
+            }),
+            solid: createTexture(ctx => {
+                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
+                drawPixels(ctx, '#707070', [[7,0],[3,1],[4,1],[12,1],[3,2],[4,2],[8,2],[12,2],[4,3],[8,3],[11,3],[12,3],[12,4],[13,4],[1,5],[7,5],[1,6],[2,6],[7,6],[8,6],[8,7],[9,7],[10,7],[3,9],[8,9],[9,9],[10,9],[4,10],[5,10],[12,10],[5,11],[6,11],[12,11],[7,12],[8,12],[1,13],[2,13],[9,13],[2,14],[3,14],[9,14],[10,14],[11,14],[12,15],[13,15]]);
+                drawPixels(ctx, '#9a9a9a', [[8,2],[8,3],[13,7],[13,8],[4,10],[4,11],[13,12]]);
+            }),
             glass: createTexture(ctx => {
-                ctx.clearRect(0,0,16,16); // Fondo transparente
-                // Bordes del marco
+                ctx.clearRect(0,0,16,16);
                 ctx.fillStyle = 'rgba(180, 210, 240, 0.6)';
-                ctx.fillRect(0,0,16,1); ctx.fillRect(0,15,16,1); // Arriba/Abajo
-                ctx.fillRect(0,0,1,16); ctx.fillRect(15,0,1,16); // Izq/Der
-                // Cruz central
+                ctx.fillRect(0,0,16,1); ctx.fillRect(0,15,16,1); ctx.fillRect(0,0,1,16); ctx.fillRect(15,0,1,16);
                 ctx.fillStyle = 'rgba(200, 230, 255, 0.4)';
                 ctx.fillRect(7,0,2,16); ctx.fillRect(0,7,16,2);
-                // Brillo de cristal
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
                 ctx.fillRect(2,2,4,4);
             }),
-
             dust_off: createTexture(ctx => {
-                // Fondo de piedra
                 ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
                 drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
                 drawPixels(ctx, '#9a9a9a', [[8,2],[4,10]]);
-                // Polvo de redstone apagado (Cruz en el centro)
                 ctx.fillStyle = '#4a0000';
                 for(let x=6; x<=9; x++) { ctx.fillRect(x, 6, 1, 1); ctx.fillRect(x, 9, 1, 1); }
                 for(let y=6; y<=9; y++) { ctx.fillRect(6, y, 1, 1); ctx.fillRect(9, y, 1, 1); }
-                ctx.fillStyle = '#200000';
-                ctx.fillRect(7,7,2,2);
+                ctx.fillStyle = '#200000'; ctx.fillRect(7,7,2,2);
             }),
-
             dust_on: createTexture(ctx => {
-                // Fondo de piedra
                 ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
                 drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
                 drawPixels(ctx, '#9a9a9a', [[8,2],[4,10]]);
-                // Polvo de redstone encendido
                 ctx.fillStyle = '#ff0000';
                 for(let x=6; x<=9; x++) { ctx.fillRect(x, 6, 1, 1); ctx.fillRect(x, 9, 1, 1); }
                 for(let y=6; y<=9; y++) { ctx.fillRect(6, y, 1, 1); ctx.fillRect(9, y, 1, 1); }
-                ctx.fillStyle = '#ff4444';
-                ctx.fillRect(7,7,2,2);
-                // Resplandor en la piedra de alrededor
+                ctx.fillStyle = '#ff4444'; ctx.fillRect(7,7,2,2);
                 ctx.fillStyle = '#aa6666';
                 ctx.fillRect(5,7,1,1); ctx.fillRect(10,7,1,1); ctx.fillRect(7,5,1,1); ctx.fillRect(7,10,1,1);
             }),
-
-            torch_off: createTexture(ctx => {
-                ctx.clearRect(0,0,16,16); // Transparente
-                // Palo de madera
-                ctx.fillStyle = '#5a3a1a';
-                ctx.fillRect(7,6,2,10);
-                ctx.fillStyle = '#4a2a10';
-                ctx.fillRect(7,8,1,6);
-                // Cabeza de redstone apagada
-                ctx.fillStyle = '#3a0000';
-                ctx.fillRect(6,4,4,2);
-                ctx.fillStyle = '#200000';
-                ctx.fillRect(7,4,2,1);
-            }),
-
-            torch_on: createTexture(ctx => {
-                ctx.clearRect(0,0,16,16); // Transparente
-                // Palo de madera
-                ctx.fillStyle = '#5a3a1a';
-                ctx.fillRect(7,6,2,10);
-                ctx.fillStyle = '#4a2a10';
-                ctx.fillRect(7,8,1,6);
-                // Cabeza de redstone encendida
-                ctx.fillStyle = '#ff0000';
-                ctx.fillRect(6,4,4,2);
-                ctx.fillStyle = '#ff4444';
-                ctx.fillRect(7,4,2,1);
-                // Brillo de antorcha
-                ctx.fillStyle = 'rgba(255, 50, 50, 0.4)';
-                ctx.fillRect(5,3,6,4);
-            }),
-
+            torch_head_off: createTexture(ctx => { ctx.fillStyle = '#3a0000'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#200000'; ctx.fillRect(4,4,8,8); }),
+            torch_head_on: createTexture(ctx => { ctx.fillStyle = '#ff0000'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#ff4444'; ctx.fillRect(4,4,8,8); }),
+            torch_stick: createTexture(ctx => { ctx.fillStyle = '#5a3a1a'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#4a2a10'; ctx.fillRect(6,0,4,16); }),
+            lever_stick: createTexture(ctx => { ctx.fillStyle = '#505050'; ctx.fillRect(0,0,16,16); }),
+            lever_handle: createTexture(ctx => { ctx.fillStyle = '#303030'; ctx.fillRect(0,0,16,16); }),
             lamp_off: createTexture(ctx => {
-                // Base de piedra
                 ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
                 drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                // Rejilla interior oscura
-                ctx.fillStyle = '#404040';
-                ctx.fillRect(4,4,8,8);
-                ctx.fillStyle = '#505050';
-                ctx.fillRect(5,5,6,6);
-                ctx.fillStyle = '#404040';
-                ctx.fillRect(7,7,2,2);
+                ctx.fillStyle = '#404040'; ctx.fillRect(4,4,8,8); ctx.fillStyle = '#505050'; ctx.fillRect(5,5,6,6); ctx.fillStyle = '#404040'; ctx.fillRect(7,7,2,2);
             }),
-
             lamp_on: createTexture(ctx => {
-                // Base de piedra
                 ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
                 drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                // Rejilla interior brillante
-                ctx.fillStyle = '#b8860b'; // Borde dorado oscuro
-                ctx.fillRect(4,4,8,8);
-                ctx.fillStyle = '#ffcc00'; // Interior amarillo
-                ctx.fillRect(5,5,6,6);
-                ctx.fillStyle = '#ffffaa'; // Núcleo cegador
-                ctx.fillRect(7,7,2,2);
-            }),
-
-            lever_off: createTexture(ctx => {
-                // Base de piedra
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                // Palanca apagada (hacia arriba)
-                ctx.fillStyle = '#505050';
-                ctx.fillRect(7,3,2,11);
-                ctx.fillStyle = '#303030';
-                ctx.fillRect(7,2,2,1); // Mango
-                // Base de soporte
-                ctx.fillStyle = '#606060';
-                ctx.fillRect(6,14,4,2);
-            }),
-
-            lever_on: createTexture(ctx => {
-                // Base de piedra
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                // Palanca encendida (hacia un lado)
-                ctx.fillStyle = '#505050';
-                ctx.fillRect(7,7,7,2);
-                ctx.fillStyle = '#303030';
-                ctx.fillRect(14,7,1,2); // Mango
-                // Base de soporte
-                ctx.fillStyle = '#606060';
-                ctx.fillRect(6,14,4,2);
-                // Indicador rojo de encendido en la base
-                ctx.fillStyle = '#ff0000';
-                ctx.fillRect(7,13,2,1);
+                ctx.fillStyle = '#b8860b'; ctx.fillRect(4,4,8,8); ctx.fillStyle = '#ffcc00'; ctx.fillRect(5,5,6,6); ctx.fillStyle = '#ffffaa'; ctx.fillRect(7,7,2,2);
             })
         };
 
         const materials = {
+            // El orden en el array es: [+Y (Top), -Y (Bottom), +Z (Front), -Z (Back), +X (Right), -X (Left)]
+            [TYPES.GRASS]: [
+                new THREE.MeshLambertMaterial({ map: textures.grass_top }),
+                new THREE.MeshLambertMaterial({ map: textures.dirt }),
+                new THREE.MeshLambertMaterial({ map: textures.grass_side }),
+                new THREE.MeshLambertMaterial({ map: textures.grass_side }),
+                new THREE.MeshLambertMaterial({ map: textures.grass_side }),
+                new THREE.MeshLambertMaterial({ map: textures.grass_side })
+            ],
             [TYPES.SOLID]: new THREE.MeshLambertMaterial({ map: textures.solid }),
             [TYPES.GLASS]: new THREE.MeshLambertMaterial({ map: textures.glass, transparent: true, opacity: 0.5 }),
             [TYPES.DUST_OFF]: new THREE.MeshLambertMaterial({ map: textures.dust_off }),
-            [TYPES.DUST_ON]: new THREE.MeshBasicMaterial({ map: textures.dust_on }), // Emissive fake
-            [TYPES.TORCH_OFF]: new THREE.MeshLambertMaterial({ map: textures.torch_off, transparent: true, alphaTest: 0.1 }),
-            [TYPES.TORCH_ON]: new THREE.MeshBasicMaterial({ map: textures.torch_on, transparent: true, alphaTest: 0.1 }),
+            [TYPES.DUST_ON]: new THREE.MeshBasicMaterial({ map: textures.dust_on }),
+            [TYPES.TORCH_OFF]: [
+                new THREE.MeshLambertMaterial({ map: textures.torch_head_off }),
+                new THREE.MeshLambertMaterial({ map: textures.torch_head_off }),
+                new THREE.MeshLambertMaterial({ map: textures.torch_stick }),
+                new THREE.MeshLambertMaterial({ map: textures.torch_stick }),
+                new THREE.MeshLambertMaterial({ map: textures.torch_stick }),
+                new THREE.MeshLambertMaterial({ map: textures.torch_stick })
+            ],
+            [TYPES.TORCH_ON]: [
+                new THREE.MeshBasicMaterial({ map: textures.torch_head_on }),
+                new THREE.MeshBasicMaterial({ map: textures.torch_head_on }),
+                new THREE.MeshBasicMaterial({ map: textures.torch_stick }),
+                new THREE.MeshBasicMaterial({ map: textures.torch_stick }),
+                new THREE.MeshBasicMaterial({ map: textures.torch_stick }),
+                new THREE.MeshBasicMaterial({ map: textures.torch_stick })
+            ],
             [TYPES.LAMP_OFF]: new THREE.MeshLambertMaterial({ map: textures.lamp_off }),
             [TYPES.LAMP_ON]: new THREE.MeshBasicMaterial({ map: textures.lamp_on }),
-            [TYPES.LEVER_OFF]: new THREE.MeshLambertMaterial({ map: textures.lever_off }),
-            [TYPES.LEVER_ON]: new THREE.MeshBasicMaterial({ map: textures.lever_on })
+            [TYPES.LEVER_OFF]: [
+                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick })
+            ],
+            [TYPES.LEVER_ON]: [
+                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
+                new THREE.MeshBasicMaterial({ map: textures.lever_stick }),
+                new THREE.MeshBasicMaterial({ map: textures.lever_stick })
+            ]
+        };
+
+        // --- GEOMETRÍAS PERSONALIZADAS ---
+        const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+
+        // Polvo de redstone (Plano sobre el suelo del voxel)
+        const dustGeo = new THREE.BoxGeometry(0.8, 0.1, 0.8);
+        dustGeo.translate(0, 0.05, 0);
+        dustGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5); // Evitar culling
+        dustGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
+
+        // Antorcha (Palo + Cabeza)
+        const torchStickGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+        torchStickGeo.translate(0, 0.25, 0);
+        const torchHeadGeo = new THREE.BoxGeometry(0.25, 0.2, 0.25);
+        torchHeadGeo.translate(0, 0.55, 0);
+        const torchGeo = mergeGeometries([torchStickGeo, torchHeadGeo]);
+        torchGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
+        torchGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
+
+        // Palanca Apagada (Mango hacia arriba)
+        const leverBaseGeo = new THREE.BoxGeometry(0.4, 0.2, 0.4);
+        leverBaseGeo.translate(0, 0.1, 0);
+        const leverStickOffGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
+        leverStickOffGeo.translate(0, 0.45, 0);
+        const leverHandleOffGeo = new THREE.BoxGeometry(0.2, 0.1, 0.2);
+        leverHandleOffGeo.translate(0, 0.75, 0);
+        const leverOffGeo = mergeGeometries([leverBaseGeo, leverStickOffGeo, leverHandleOffGeo]);
+        leverOffGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
+        leverOffGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
+
+        // Palanca Encendida (Mango hacia un lado)
+        const leverStickOnGeo = new THREE.BoxGeometry(0.5, 0.1, 0.1);
+        leverStickOnGeo.translate(0.2, 0.35, 0);
+        const leverHandleOnGeo = new THREE.BoxGeometry(0.1, 0.2, 0.2);
+        leverHandleOnGeo.translate(0.5, 0.35, 0);
+        const leverOnGeo = mergeGeometries([leverBaseGeo, leverStickOnGeo, leverHandleOnGeo]);
+        leverOnGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
+        leverOnGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
+
+        const geoMap = {
+            [TYPES.GRASS]: blockGeo,
+            [TYPES.SOLID]: blockGeo,
+            [TYPES.GLASS]: blockGeo,
+            [TYPES.DUST_OFF]: dustGeo,
+            [TYPES.DUST_ON]: dustGeo,
+            [TYPES.TORCH_OFF]: torchGeo,
+            [TYPES.TORCH_ON]: torchGeo,
+            [TYPES.LAMP_OFF]: blockGeo,
+            [TYPES.LAMP_ON]: blockGeo,
+            [TYPES.LEVER_OFF]: leverOffGeo,
+            [TYPES.LEVER_ON]: leverOnGeo
         };
 
         // --- LÓGICA DEL MUNDO (VOXELS) ---
         let grid = new Array(WORLD_SIZE).fill(null).map(() => 
-            new Array(WORLD_SIZE).fill(null).map(() => 
-                new Array(WORLD_SIZE).fill(TYPES.AIR)
-            )
+            new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(TYPES.AIR))
         );
         let powerGrid = new Array(WORLD_SIZE).fill(null).map(() => 
-            new Array(WORLD_SIZE).fill(null).map(() => 
-                new Array(WORLD_SIZE).fill(0)
-            )
+            new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(0))
         );
 
-        for(let x=0; x<WORLD_SIZE; x++) for(let z=0; z<WORLD_SIZE; z++) grid[0][x][z] = TYPES.SOLID;
+        for(let x=0; x<WORLD_SIZE; x++) for(let z=0; z<WORLD_SIZE; z++) grid[0][x][z] = TYPES.GRASS;
 
         function getBlock(x,y,z) {
             if(x<0||x>=WORLD_SIZE||y<0||y>=WORLD_SIZE||z<0||z>=WORLD_SIZE) return TYPES.AIR;
@@ -267,16 +273,13 @@
             buildMeshes();
         }
 
-        // --- LÓGICA REDSTONE (BFS) ---
+        // --- LÓGICA REDSTONE (Sin cambios profundos, funciona igual) ---
         function updateRedstone() {
             for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) powerGrid[y][x][z] = 0;
             let queue = [];
 
             for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
-                if(grid[y][x][z] === TYPES.LEVER_ON) {
-                    powerGrid[y][x][z] = 15;
-                    queue.push({x,y,z,p:15});
-                }
+                if(grid[y][x][z] === TYPES.LEVER_ON) { powerGrid[y][x][z] = 15; queue.push({x,y,z,p:15}); }
             }
 
             while(queue.length > 0) {
@@ -286,22 +289,14 @@
                     {x: curr.x, y: curr.y+1, z: curr.z}, {x: curr.x, y: curr.y-1, z: curr.z},
                     {x: curr.x, y: curr.y, z: curr.z+1}, {x: curr.x, y: curr.y, z: curr.z-1}
                 ];
-
                 for(let n of neighbors) {
                     let type = getBlock(n.x, n.y, n.z);
-                    if(type === TYPES.AIR || type === TYPES.GLASS) continue;
-
+                    if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.GRASS) continue; // Pasto también aísla
                     let newPower = 0;
-                    if(type === TYPES.DUST_OFF || type === TYPES.DUST_ON) {
-                        newPower = curr.p - 1;
-                    } else if(type === TYPES.SOLID || type === TYPES.LEVER_OFF || type === TYPES.LEVER_ON || type === TYPES.LAMP_OFF || type === TYPES.LAMP_ON) {
-                        newPower = curr.p;
-                    } else if(type === TYPES.TORCH_OFF) {
-                        if(curr.y === n.y - 1 && curr.p > 0) newPower = 0; 
-                        else continue;
-                    } else if(type === TYPES.TORCH_ON) {
-                        continue;
-                    }
+                    if(type === TYPES.DUST_OFF || type === TYPES.DUST_ON) newPower = curr.p - 1;
+                    else if(type === TYPES.SOLID || type === TYPES.LEVER_OFF || type === TYPES.LEVER_ON || type === TYPES.LAMP_OFF || type === TYPES.LAMP_ON) newPower = curr.p;
+                    else if(type === TYPES.TORCH_OFF) { if(curr.y === n.y - 1 && curr.p > 0) newPower = 0; else continue; }
+                    else if(type === TYPES.TORCH_ON) continue;
 
                     if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
                         powerGrid[n.y][n.x][n.z] = newPower;
@@ -311,20 +306,14 @@
             }
 
             for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
-                let p = powerGrid[y][x][z];
-                let type = grid[y][x][z];
-                
+                let p = powerGrid[y][x][z]; let type = grid[y][x][z];
                 if(type === TYPES.DUST_OFF && p > 0) grid[y][x][z] = TYPES.DUST_ON;
                 if(type === TYPES.DUST_ON && p === 0) grid[y][x][z] = TYPES.DUST_OFF;
                 if(type === TYPES.LAMP_OFF && p > 0) grid[y][x][z] = TYPES.LAMP_ON;
                 if(type === TYPES.LAMP_ON && p === 0) grid[y][x][z] = TYPES.LAMP_OFF;
-
-                if(type === TYPES.TORCH_ON && getBlock(x, y-1, z) !== TYPES.AIR && powerGrid[y-1][x][z] > 0) {
-                    grid[y][x][z] = TYPES.TORCH_OFF;
-                } else if(type === TYPES.TORCH_OFF && (getBlock(x, y-1, z) === TYPES.AIR || powerGrid[y-1][x][z] === 0)) {
-                    grid[y][x][z] = TYPES.TORCH_ON;
-                    powerGrid[y][x][z] = 15;
-                    queue.push({x,y,z,p:15});
+                if(type === TYPES.TORCH_ON && getBlock(x, y-1, z) !== TYPES.AIR && powerGrid[y-1][x][z] > 0) grid[y][x][z] = TYPES.TORCH_OFF;
+                else if(type === TYPES.TORCH_OFF && (getBlock(x, y-1, z) === TYPES.AIR || powerGrid[y-1][x][z] === 0)) {
+                    grid[y][x][z] = TYPES.TORCH_ON; powerGrid[y][x][z] = 15; queue.push({x,y,z,p:15});
                 }
             }
 
@@ -338,13 +327,12 @@
                     ];
                     for(let n of neighbors) {
                         let type = getBlock(n.x, n.y, n.z);
-                        if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.TORCH_ON || type === TYPES.TORCH_OFF) continue;
+                        if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.GRASS || type === TYPES.TORCH_ON || type === TYPES.TORCH_OFF) continue;
                         let newPower = (type === TYPES.DUST_ON || type === TYPES.DUST_OFF) ? curr.p - 1 : curr.p;
                         if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
-                            powerGrid[n.y][n.x][n.z] = newPower;
-                            queue.push({x: n.x, y: n.y, z: n.z, p: newPower});
-                            if(type === TYPES.DUST_OFF) grid[n.y][n.x][n.z] = TYPES.DUST_ON;
-                            if(type === TYPES.LAMP_OFF) grid[n.y][n.x][n.z] = TYPES.LAMP_ON;
+                            powerGrid[n.y][n.x][n.z] = newPower; queue.push({x: n.x, y: n.y, z: n.z, p: newPower});
+                            if(type === TYPES.DUST_OFF) grid[n.y][n.x][z] = TYPES.DUST_ON;
+                            if(type === TYPES.LAMP_OFF) grid[n.y][n.x][z] = TYPES.LAMP_ON;
                         }
                     }
                 }
@@ -369,30 +357,25 @@
         scene.add(light);
         scene.add(new THREE.AmbientLight(0x404040));
 
+        // --- CAJA DE SELECCIÓN ---
+        const selectionBoxGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
+        const selectionBoxEdges = new THREE.EdgesGeometry(selectionBoxGeo);
+        const selectionBoxLine = new THREE.LineSegments(selectionBoxEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+        selectionBoxLine.visible = false;
+        scene.add(selectionBoxLine);
+
         // --- MESHING ---
-        const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
         const meshes = {};
-
         function buildMeshes() {
-            for(let key in meshes) {
-                scene.remove(meshes[key]);
-                meshes[key].dispose();
-            }
-
-            const counts = {};
-            const positions = {};
+            for(let key in meshes) { scene.remove(meshes[key]); meshes[key].dispose(); }
+            const counts = {}; const positions = {};
 
             for(let y=0; y<WORLD_SIZE; y++) {
                 for(let x=0; x<WORLD_SIZE; x++) {
                     for(let z=0; z<WORLD_SIZE; z++) {
                         let type = grid[y][x][z];
                         if(type === TYPES.AIR) continue;
-
-                        let neighbors = [
-                            getBlock(x+1,y,z), getBlock(x-1,y,z),
-                            getBlock(x,y+1,z), getBlock(x,y-1,z),
-                            getBlock(x,y,z+1), getBlock(x,y,z-1)
-                        ];
+                        let neighbors = [ getBlock(x+1,y,z), getBlock(x-1,y,z), getBlock(x,y+1,z), getBlock(x,y-1,z), getBlock(x,y,z+1), getBlock(x,y,z-1) ];
                         let isHidden = neighbors.every(n => n !== TYPES.AIR && n !== TYPES.GLASS && n !== TYPES.DUST_ON && n !== TYPES.DUST_OFF && n !== TYPES.TORCH_ON && n !== TYPES.TORCH_OFF && n !== TYPES.LEVER_ON && n !== TYPES.LEVER_OFF);
                         if(isHidden && type !== TYPES.GLASS) continue;
 
@@ -405,7 +388,7 @@
 
             const dummy = new THREE.Object3D();
             for(let type in counts) {
-                let mesh = new THREE.InstancedMesh(blockGeo, materials[type], counts[type]);
+                let mesh = new THREE.InstancedMesh(geoMap[type], materials[type], counts[type]);
                 let pos = positions[type];
                 for(let i=0; i<counts[type]; i++) {
                     dummy.position.set(pos[i*3] + 0.5, pos[i*3+1] + 0.5, pos[i*3+2] + 0.5);
@@ -416,7 +399,6 @@
                 meshes[type] = mesh;
             }
         }
-
         buildMeshes();
 
         // --- CONTROLES FPS ---
@@ -424,114 +406,67 @@
         const euler = new THREE.Euler(0, 0, 0, 'YXZ');
         const velocity = new THREE.Vector3();
         const direction = new THREE.Vector3();
-        const keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+        const keys = { w: false, a: false, s: false, d: false, space: false };
 
-        document.getElementById('instructions').addEventListener('click', () => {
-            renderer.domElement.requestPointerLock();
-        });
-
+        document.getElementById('instructions').addEventListener('click', () => renderer.domElement.requestPointerLock());
         document.addEventListener('pointerlockchange', () => {
             isLocked = document.pointerLockElement === renderer.domElement;
-            document.getElementById('instructions').style.display = isLocked ? 'none' : 'block';
+            document.getElementById('instructions').style.display = isLocked ? 'none' : 'block";
         });
-
         document.addEventListener('mousemove', (e) => {
             if (!isLocked) return;
             euler.setFromQuaternion(camera.quaternion);
-            euler.y -= e.movementX * 0.002;
-            euler.x -= e.movementY * 0.002;
+            euler.y -= e.movementX * 0.002; euler.x -= e.movementY * 0.002;
             euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, euler.x));
             camera.quaternion.setFromEuler(euler);
         });
-
-        document.addEventListener('keydown', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; switch(e.code){ case 'Space': keys.space=true; e.preventDefault(); break; } });
-        document.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; switch(e.code){ case 'Space': keys.space=false; break; } });
+        document.addEventListener('keydown', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; if(e.code==='Space'){keys.space=true; e.preventDefault();} });
+        document.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; if(e.code==='Space') keys.space=false; });
 
         // --- UI HOTBAR ---
         const slots = document.querySelectorAll('.slot');
         const typesMap = ['solid', 'glass', 'dust_off', 'torch_off', 'lamp_off', 'lever_off'];
         const idToType = { solid: TYPES.SOLID, glass: TYPES.GLASS, dust_off: TYPES.DUST_OFF, torch_off: TYPES.TORCH_OFF, lamp_off: TYPES.LAMP_OFF, lever_off: TYPES.LEVER_OFF };
-
-        slots.forEach((slot, i) => {
-            let tex = textures[typesMap[i]];
-            let img = document.createElement('img');
-            img.src = tex.image.toDataURL();
-            slot.prepend(img);
-        });
-
+        slots.forEach((slot, i) => { let img = document.createElement('img'); img.src = textures[typesMap[i]].image.toDataURL(); slot.prepend(img); });
+        
         function updateHotbar(index) {
             slots.forEach(s => s.classList.remove('active'));
             slots[index].classList.add('active');
             selectedBlockType = idToType[typesMap[index]];
         }
+        document.addEventListener('wheel', (e) => { let curr = Array.from(slots).findIndex(s => s.classList.contains('active')); updateHotbar(e.deltaY > 0 ? (curr + 1) % 6 : (curr - 1 + 6) % 6); });
+        window.addEventListener('keydown', (e) => { let num = parseInt(e.key); if(num >= 1 && num <= 6) updateHotbar(num - 1); });
 
-        document.addEventListener('wheel', (e) => {
-            let curr = Array.from(slots).findIndex(s => s.classList.contains('active'));
-            let next = e.deltaY > 0 ? (curr + 1) % 6 : (curr - 1 + 6) % 6;
-            updateHotbar(next);
-        });
-
-        window.addEventListener('keydown', (e) => {
-            let num = parseInt(e.key);
-            if(num >= 1 && num <= 6) updateHotbar(num - 1);
-        });
-
-        // --- RAYCASTING ---
+        // --- RAYCASTING CONTINUO ---
         const raycaster = new THREE.Raycaster();
         raycaster.far = 8;
         const center = new THREE.Vector2(0, 0);
 
         document.addEventListener('mousedown', (e) => {
-            if (!isLocked) return;
+            if (!isLocked || !lookAtBlock) return;
+            const {x: bx, y: by, z: bz} = lookAtBlock;
 
-            raycaster.setFromCamera(center, camera);
-            const intersects = raycaster.intersectObjects(Object.values(meshes));
+            if (e.button === 0) { // Romper
+                if(getBlock(bx, by, bz) !== TYPES.AIR) { grid[by][bx][bz] = TYPES.AIR; needsRedstoneUpdate = true; buildMeshes(); }
+            } else if (e.button === 2) { // Colocar
+                const px = bx + lookAtNormal.x;
+                const py = by + lookAtNormal.y;
+                const pz = bz + lookAtNormal.z;
 
-            if (intersects.length > 0) {
-                const intersect = intersects[0];
-                const pos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(-0.5));
-                const bx = Math.floor(pos.x);
-                const by = Math.floor(pos.y);
-                const bz = Math.floor(pos.z);
+                const pMinX = camera.position.x - 0.3, pMaxX = camera.position.x + 0.3;
+                const pMinY = camera.position.y - 1.5, pMaxY = camera.position.y + 0.2;
+                const pMinZ = camera.position.z - 0.3, pMaxZ = camera.position.z + 0.3;
 
-                if (e.button === 0) {
-                    if(getBlock(bx, by, bz) !== TYPES.AIR) {
-                        grid[by][bx][bz] = TYPES.AIR;
-                        needsRedstoneUpdate = true;
-                        buildMeshes();
-                    }
-                } else if (e.button === 2) {
-                    const placePos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(0.5));
-                    const px = Math.floor(placePos.x);
-                    const py = Math.floor(placePos.y);
-                    const pz = Math.floor(placePos.z);
+                if (px+1 > pMinX && px < pMaxX && py+1 > pMinY && py < pMaxY && pz+1 > pMinZ && pz < pMaxZ) return;
 
-                    const playerMinX = camera.position.x - 0.3;
-                    const playerMaxX = camera.position.x + 0.3;
-                    const playerMinY = camera.position.y - 1.5;
-                    const playerMaxY = camera.position.y + 0.2;
-                    const playerMinZ = camera.position.z - 0.3;
-                    const playerMaxZ = camera.position.z + 0.3;
-
-                    if (px+1 > playerMinX && px < playerMaxX &&
-                        py+1 > playerMinY && py < playerMaxY &&
-                        pz+1 > playerMinZ && pz < playerMaxZ) return;
-
-                    if(getBlock(px, py, pz) === TYPES.AIR) {
-                        if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_OFF) {
-                            grid[by][bx][bz] = TYPES.LEVER_ON;
-                        } else if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_ON) {
-                            grid[by][bx][bz] = TYPES.LEVER_OFF;
-                        } else {
-                            grid[py][px][pz] = selectedBlockType;
-                        }
-                        needsRedstoneUpdate = true;
-                        buildMeshes();
-                    }
+                if(getBlock(px, py, pz) === TYPES.AIR) {
+                    if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_OFF) grid[by][bx][bz] = TYPES.LEVER_ON;
+                    else if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_ON) grid[by][bx][bz] = TYPES.LEVER_OFF;
+                    else grid[py][px][pz] = selectedBlockType;
+                    needsRedstoneUpdate = true; buildMeshes();
                 }
             }
         });
-
         document.addEventListener('contextmenu', e => e.preventDefault());
 
         // --- FÍSICAS Y LOOP ---
@@ -539,13 +474,12 @@
         let canJump = true;
 
         function checkCollision(x, y, z) {
-            const margin = 0.3;
-            const height = 1.6;
+            const margin = 0.3; const height = 1.6;
             for(let dy = 0; dy <= height; dy += 0.5) {
-                let type = getBlock(Math.floor(x + margin), Math.floor(y + dy), Math.floor(z + margin));
-                let type2 = getBlock(Math.floor(x - margin), Math.floor(y + dy), Math.floor(z - margin));
-                if(type !== TYPES.AIR && type !== TYPES.GLASS && type !== TYPES.DUST_OFF && type !== TYPES.DUST_ON && type !== TYPES.TORCH_OFF && type !== TYPES.TORCH_ON && type !== TYPES.LEVER_OFF && type !== TYPES.LEVER_ON) return true;
-                if(type2 !== TYPES.AIR && type2 !== TYPES.GLASS && type2 !== TYPES.DUST_OFF && type2 !== TYPES.DUST_ON && type2 !== TYPES.TORCH_OFF && type2 !== TYPES.TORCH_ON && type2 !== TYPES.LEVER_OFF && type2 !== TYPES.LEVER_ON) return true;
+                let t1 = getBlock(Math.floor(x + margin), Math.floor(y + dy), Math.floor(z + margin));
+                let t2 = getBlock(Math.floor(x - margin), Math.floor(y + dy), Math.floor(z - margin));
+                if(t1 !== TYPES.AIR && t1 !== TYPES.GLASS && t1 !== TYPES.DUST_OFF && t1 !== TYPES.DUST_ON && t1 !== TYPES.TORCH_OFF && t1 !== TYPES.TORCH_ON && t1 !== TYPES.LEVER_OFF && t1 !== TYPES.LEVER_ON) return true;
+                if(t2 !== TYPES.AIR && t2 !== TYPES.GLASS && t2 !== TYPES.DUST_OFF && t2 !== TYPES.DUST_ON && t2 !== TYPES.TORCH_OFF && t2 !== TYPES.TORCH_ON && t2 !== TYPES.LEVER_OFF && t2 !== TYPES.LEVER_ON) return true;
             }
             return false;
         }
@@ -554,9 +488,25 @@
             requestAnimationFrame(animate);
             const delta = Math.min(clock.getDelta(), 0.1);
 
-            if (needsRedstoneUpdate) {
-                updateRedstone();
-                needsRedstoneUpdate = false;
+            if (needsRedstoneUpdate) { updateRedstone(); needsRedstoneUpdate = false; }
+
+            // Actualizar Raycast y Caja de Selección
+            if (isLocked) {
+                raycaster.setFromCamera(center, camera);
+                const intersects = raycaster.intersectObjects(Object.values(meshes));
+                if (intersects.length > 0) {
+                    const intersect = intersects[0];
+                    const pos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(-0.5));
+                    lookAtBlock = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
+                    lookAtNormal = intersect.face.normal;
+                    selectionBoxLine.position.set(lookAtBlock.x + 0.5, lookAtBlock.y + 0.5, lookAtBlock.z + 0.5);
+                    selectionBoxLine.visible = true;
+                } else {
+                    lookAtBlock = null; lookAtNormal = null;
+                    selectionBoxLine.visible = false;
+                }
+            } else {
+                selectionBoxLine.visible = false;
             }
 
             if (isLocked) {
@@ -566,33 +516,23 @@
                 direction.normalize();
 
                 const speed = 5.0;
-                const forward = new THREE.Vector3();
-                camera.getWorldDirection(forward);
-                forward.y = 0; forward.normalize();
+                const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
                 const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
 
                 velocity.x += (forward.x * direction.z + right.x * direction.x) * speed * delta;
                 velocity.z += (forward.z * direction.z + right.z * direction.x) * speed * delta;
-
                 velocity.y -= 20 * delta;
                 if(keys.space && canJump) { velocity.y = 8; canJump = false; }
 
                 let nextX = camera.position.x + velocity.x * delta;
-                if(!checkCollision(nextX, camera.position.y - 1.5, camera.position.z)) camera.position.x = nextX;
-                else velocity.x = 0;
+                if(!checkCollision(nextX, camera.position.y - 1.5, camera.position.z)) camera.position.x = nextX; else velocity.x = 0;
 
                 let nextZ = camera.position.z + velocity.z * delta;
-                if(!checkCollision(camera.position.x, camera.position.y - 1.5, nextZ)) camera.position.z = nextZ;
-                else velocity.z = 0;
+                if(!checkCollision(camera.position.x, camera.position.y - 1.5, nextZ)) camera.position.z = nextZ; else velocity.z = 0;
 
                 let nextY = camera.position.y + velocity.y * delta;
-                if(!checkCollision(camera.position.x, nextY - 1.5, camera.position.z)) {
-                    camera.position.y = nextY;
-                    canJump = false;
-                } else {
-                    if(velocity.y < 0) canJump = true;
-                    velocity.y = 0;
-                }
+                if(!checkCollision(camera.position.x, nextY - 1.5, camera.position.z)) { camera.position.y = nextY; canJump = false; }
+                else { if(velocity.y < 0) canJump = true; velocity.y = 0; }
 
                 camera.position.x = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.x));
                 camera.position.z = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.z));
@@ -602,12 +542,7 @@
             renderer.render(scene, camera);
         }
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
+        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
         animate();
     </script>
 </body>
