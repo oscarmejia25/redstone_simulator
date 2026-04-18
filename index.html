@@ -3,18 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redstone Sandbox 3D</title>
+    <title>Redstone Sandbox - Base</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; user-select: none; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
         #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-shadow: 1px 1px 2px black; }
-        #instructions { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; }
+        #instructions { color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; }
         #instructions h1 { margin-top: 0; color: #ff5555; }
-        #hotbar { display: flex; justify-content: center; gap: 5px; margin-bottom: 10px; pointer-events: auto; }
-        .slot { width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 2px solid #555; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; position: relative; }
+        #hotbar { display: flex; gap: 5px; margin-bottom: 10px; }
+        .slot { width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 2px solid #555; }
         .slot.active { border-color: #fff; background: rgba(255,255,255,0.2); }
-        .slot img { width: 40px; height: 40px; image-rendering: pixelated; }
-        .slot span { position: absolute; bottom: 2px; right: 5px; font-size: 10px; }
     </style>
 </head>
 <body>
@@ -22,15 +20,15 @@
         <div id="crosshair">+</div>
         <div id="instructions">
             <h1>Redstone Sandbox</h1>
-            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar<br>Clic Izq: Romper | Clic Der: Poner<br>Rueda/Teclas 1-6: Seleccionar</p>
+            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar</p>
         </div>
         <div id="hotbar">
-            <div class="slot active" data-id="solid"><span>1</span></div>
-            <div class="slot" data-id="glass"><span>2</span></div>
-            <div class="slot" data-id="dust_off"><span>3</span></div>
-            <div class="slot" data-id="torch_off"><span>4</span></div>
-            <div class="slot" data-id="lamp_off"><span>5</span></div>
-            <div class="slot" data-id="lever_off"><span>6</span></div>
+            <div class="slot active"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
         </div>
     </div>
 
@@ -44,488 +42,197 @@
     </script>
     <script type="module">
         import * as THREE from 'three';
-        import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-        const BLOCK_SIZE = 1;
-        const WORLD_SIZE = 16;
-        const TYPES = {
-            AIR: 0, GRASS: 1, SOLID: 2, GLASS: 3, 
-            DUST_OFF: 4, DUST_ON: 5, 
-            TORCH_OFF: 6, TORCH_ON: 7, 
-            LAMP_OFF: 8, LAMP_ON: 9, 
-            LEVER_OFF: 10, LEVER_ON: 11
-        };
+        // --- CONFIGURACIÓN BÁSICA ---
+        const WORLD_SIZE = 64;
+        const PLAYER_HEIGHT = 1.6; // Altura de los ojos
+        const PLAYER_RADIUS = 0.3; // Ancho del jugador para colisiones
+        const GRAVITY = 25;
+        const JUMP_FORCE = 9;
+        const MOVE_SPEED = 6;
 
-        let selectedBlockType = TYPES.SOLID;
-        let needsRedstoneUpdate = false;
-        let lookAtBlock = null;
-        let lookAtNormal = null;
-
-        // --- TEXTURAS ---
-        function createTexture(drawFunc) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 16; canvas.height = 16;
-            const ctx = canvas.getContext('2d');
-            drawFunc(ctx);
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.magFilter = THREE.NearestFilter;
-            tex.minFilter = THREE.NearestFilter;
-            return tex;
-        }
-
-        const drawPixels = (ctx, color, coords) => {
-            ctx.fillStyle = color;
-            coords.forEach(p => ctx.fillRect(p[0], p[1], 1, 1));
-        };
-
-        const textures = {
-            grass_top: createTexture(ctx => {
-                ctx.fillStyle = '#5da83a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#4d8a30', [[2,1],[5,3],[8,2],[11,4],[14,1],[1,6],[4,8],[7,7],[10,9],[13,6],[2,11],[5,13],[8,12],[11,14],[14,11],[3,15],[9,15]]);
-                drawPixels(ctx, '#6db84a', [[1,2],[6,1],[12,3],[0,8],[6,10],[13,12],[2,14],[8,9]]);
-            }),
-            grass_side: createTexture(ctx => {
-                ctx.fillStyle = '#866043'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#7a5638', [[2,4],[5,6],[8,5],[12,7],[14,9],[1,10],[6,12],[10,11],[13,14],[3,15]]);
-                ctx.fillStyle = '#5da83a'; ctx.fillRect(0,0,16,3);
-                ctx.fillStyle = '#4d8a30'; ctx.fillRect(0,3,16,1);
-                ctx.fillStyle = '#5da83a';
-                ctx.fillRect(1,3,1,1); ctx.fillRect(4,3,1,2); ctx.fillRect(8,3,1,1); ctx.fillRect(11,3,1,2); ctx.fillRect(14,3,1,1);
-            }),
-            dirt: createTexture(ctx => {
-                ctx.fillStyle = '#866043'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#7a5638', [[1,1],[4,3],[7,2],[10,4],[13,1],[0,6],[3,8],[6,7],[9,9],[12,6],[1,11],[4,13],[7,12],[10,14],[13,11],[2,15],[8,15]]);
-                drawPixels(ctx, '#926d50', [[2,0],[5,2],[8,1],[11,3],[14,0],[1,5],[4,7],[7,6],[10,8],[13,5]]);
-            }),
-            solid: createTexture(ctx => {
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#707070', [[7,0],[3,1],[4,1],[12,1],[3,2],[4,2],[8,2],[12,2],[4,3],[8,3],[11,3],[12,3],[12,4],[13,4],[1,5],[7,5],[1,6],[2,6],[7,6],[8,6],[8,7],[9,7],[10,7],[3,9],[8,9],[9,9],[10,9],[4,10],[5,10],[12,10],[5,11],[6,11],[12,11],[7,12],[8,12],[1,13],[2,13],[9,13],[2,14],[3,14],[9,14],[10,14],[11,14],[12,15],[13,15]]);
-                drawPixels(ctx, '#9a9a9a', [[8,2],[8,3],[13,7],[13,8],[4,10],[4,11],[13,12]]);
-            }),
-            glass: createTexture(ctx => {
-                ctx.clearRect(0,0,16,16);
-                ctx.fillStyle = 'rgba(180, 210, 240, 0.6)';
-                ctx.fillRect(0,0,16,1); ctx.fillRect(0,15,16,1); ctx.fillRect(0,0,1,16); ctx.fillRect(15,0,1,16);
-                ctx.fillStyle = 'rgba(200, 230, 255, 0.4)';
-                ctx.fillRect(7,0,2,16); ctx.fillRect(0,7,16,2);
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-                ctx.fillRect(2,2,4,4);
-            }),
-            dust_off: createTexture(ctx => {
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                drawPixels(ctx, '#9a9a9a', [[8,2],[4,10]]);
-                ctx.fillStyle = '#4a0000';
-                for(let x=6; x<=9; x++) { ctx.fillRect(x, 6, 1, 1); ctx.fillRect(x, 9, 1, 1); }
-                for(let y=6; y<=9; y++) { ctx.fillRect(6, y, 1, 1); ctx.fillRect(9, y, 1, 1); }
-                ctx.fillStyle = '#200000'; ctx.fillRect(7,7,2,2);
-            }),
-            dust_on: createTexture(ctx => {
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                drawPixels(ctx, '#9a9a9a', [[8,2],[4,10]]);
-                ctx.fillStyle = '#ff0000';
-                for(let x=6; x<=9; x++) { ctx.fillRect(x, 6, 1, 1); ctx.fillRect(x, 9, 1, 1); }
-                for(let y=6; y<=9; y++) { ctx.fillRect(6, y, 1, 1); ctx.fillRect(9, y, 1, 1); }
-                ctx.fillStyle = '#ff4444'; ctx.fillRect(7,7,2,2);
-                ctx.fillStyle = '#aa6666';
-                ctx.fillRect(5,7,1,1); ctx.fillRect(10,7,1,1); ctx.fillRect(7,5,1,1); ctx.fillRect(7,10,1,1);
-            }),
-            torch_head_off: createTexture(ctx => { ctx.fillStyle = '#3a0000'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#200000'; ctx.fillRect(4,4,8,8); }),
-            torch_head_on: createTexture(ctx => { ctx.fillStyle = '#ff0000'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#ff4444'; ctx.fillRect(4,4,8,8); }),
-            torch_stick: createTexture(ctx => { ctx.fillStyle = '#5a3a1a'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#4a2a10'; ctx.fillRect(6,0,4,16); }),
-            lever_stick: createTexture(ctx => { ctx.fillStyle = '#505050'; ctx.fillRect(0,0,16,16); }),
-            lever_handle: createTexture(ctx => { ctx.fillStyle = '#303030'; ctx.fillRect(0,0,16,16); }),
-            lamp_off: createTexture(ctx => {
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                ctx.fillStyle = '#404040'; ctx.fillRect(4,4,8,8); ctx.fillStyle = '#505050'; ctx.fillRect(5,5,6,6); ctx.fillStyle = '#404040'; ctx.fillRect(7,7,2,2);
-            }),
-            lamp_on: createTexture(ctx => {
-                ctx.fillStyle = '#8a8a8a'; ctx.fillRect(0,0,16,16);
-                drawPixels(ctx, '#707070', [[3,2],[4,2],[8,3],[12,4],[7,5],[1,6],[8,7],[9,7],[8,8],[9,8],[10,7],[11,8],[4,10],[12,10],[7,12],[9,13]]);
-                ctx.fillStyle = '#b8860b'; ctx.fillRect(4,4,8,8); ctx.fillStyle = '#ffcc00'; ctx.fillRect(5,5,6,6); ctx.fillStyle = '#ffffaa'; ctx.fillRect(7,7,2,2);
-            })
-        };
-
-        // Materiales ordenados según cómo Three.js lee las caras: +X, -X, +Y, -Y, +Z, -Z
-        const materials = {
-            [TYPES.GRASS]: [
-                new THREE.MeshLambertMaterial({ map: textures.grass_side }), // +X
-                new THREE.MeshLambertMaterial({ map: textures.grass_side }), // -X
-                new THREE.MeshLambertMaterial({ map: textures.grass_top }),  // +Y (Top)
-                new THREE.MeshLambertMaterial({ map: textures.dirt }),       // -Y (Bottom)
-                new THREE.MeshLambertMaterial({ map: textures.grass_side }), // +Z
-                new THREE.MeshLambertMaterial({ map: textures.grass_side })  // -Z
-            ],
-            [TYPES.SOLID]: new THREE.MeshLambertMaterial({ map: textures.solid }),
-            [TYPES.GLASS]: new THREE.MeshLambertMaterial({ map: textures.glass, transparent: true, opacity: 0.5 }),
-            [TYPES.DUST_OFF]: new THREE.MeshLambertMaterial({ map: textures.dust_off }),
-            [TYPES.DUST_ON]: new THREE.MeshBasicMaterial({ map: textures.dust_on }),
-            // Para antorcha y palanca: El orden es [Cabeza/Mango, Palo/Base] (definido abajo en los grupos)
-            [TYPES.TORCH_OFF]: [
-                new THREE.MeshLambertMaterial({ map: textures.torch_head_off }),
-                new THREE.MeshLambertMaterial({ map: textures.torch_stick })
-            ],
-            [TYPES.TORCH_ON]: [
-                new THREE.MeshBasicMaterial({ map: textures.torch_head_on }),
-                new THREE.MeshBasicMaterial({ map: textures.torch_stick })
-            ],
-            [TYPES.LAMP_OFF]: new THREE.MeshLambertMaterial({ map: textures.lamp_off }),
-            [TYPES.LAMP_ON]: new THREE.MeshBasicMaterial({ map: textures.lamp_on }),
-            [TYPES.LEVER_OFF]: [
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick }), 
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick }), 
-                new THREE.MeshLambertMaterial({ map: textures.lever_handle })
-            ],
-            [TYPES.LEVER_ON]: [
-                new THREE.MeshBasicMaterial({ map: textures.lever_stick }), 
-                new THREE.MeshBasicMaterial({ map: textures.lever_stick }), 
-                new THREE.MeshLambertMaterial({ map: textures.lever_handle })
-            ]
-        };
-
-        // --- GEOMETRÍAS 3D REALES ---
-        const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-
-        // Polvo (Cubo muy plano pegado al suelo)
-        const dustGeo = new THREE.BoxGeometry(0.8, 0.1, 0.8);
-        dustGeo.translate(0, 0.05, 0);
-        dustGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
-        dustGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), Math.sqrt(3)/2);
-
-        // Antorcha (Combinar palo y cabeza manteniendo sus materiales)
-        const torchStickGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
-        torchStickGeo.translate(0, 0.25, 0);
-        const torchHeadGeo = new THREE.BoxGeometry(0.25, 0.2, 0.25);
-        torchHeadGeo.translate(0, 0.55, 0);
-        const torchGeo = mergeGeometries([torchStickGeo, torchHeadGeo]);
-        torchGeo.clearGroups();
-        // Asignar material 0 a la cabeza y material 1 al palo
-        for(let i=0; i<6; i++) torchGeo.addGroup(torchHeadGeo.groups[i].start + torchStickGeo.index.count, torchHeadGeo.groups[i].count, 0);
-        for(let i=0; i<6; i++) torchGeo.addGroup(torchStickGeo.groups[i].start, torchStickGeo.groups[i].count, 1);
-        torchGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
-        torchGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), Math.sqrt(3)/2);
-
-        // Función auxiliar para crear la palanca (Apagada o Encendida)
-        function createLeverGeo(isOn) {
-            const base = new THREE.BoxGeometry(0.4, 0.2, 0.4).translate(0, 0.1, 0);
-            const stick = isOn ? new THREE.BoxGeometry(0.5, 0.1, 0.1).translate(0.2, 0.35, 0) 
-                              : new THREE.BoxGeometry(0.1, 0.5, 0.1).translate(0, 0.45, 0);
-            const handle = isOn ? new THREE.BoxGeometry(0.1, 0.2, 0.2).translate(0.5, 0.35, 0) 
-                                : new THREE.BoxGeometry(0.2, 0.1, 0.2).translate(0, 0.75, 0);
-            
-            const geo = mergeGeometries([base, stick, handle]);
-            geo.clearGroups();
-            let offset = 0;
-            [base, stick, handle].forEach((g, idx) => {
-                for(let i=0; i<6; i++) geo.addGroup(g.groups[i].start + offset, g.groups[i].count, idx);
-                offset += g.index.count;
-            });
-            geo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
-            geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), Math.sqrt(3)/2);
-            return geo;
-        }
-        const leverOffGeo = createLeverGeo(false);
-        const leverOnGeo = createLeverGeo(true);
-
-        const geoMap = {
-            [TYPES.GRASS]: blockGeo, [TYPES.SOLID]: blockGeo, [TYPES.GLASS]: blockGeo,
-            [TYPES.DUST_OFF]: dustGeo, [TYPES.DUST_ON]: dustGeo,
-            [TYPES.TORCH_OFF]: torchGeo, [TYPES.TORCH_ON]: torchGeo,
-            [TYPES.LAMP_OFF]: blockGeo, [TYPES.LAMP_ON]: blockGeo,
-            [TYPES.LEVER_OFF]: leverOffGeo, [TYPES.LEVER_ON]: leverOnGeo
-        };
-
-        // --- LÓGICA DEL MUNDO ---
-        let grid = new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(TYPES.AIR)));
-        let powerGrid = new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(0)));
-
-        for(let x=0; x<WORLD_SIZE; x++) for(let z=0; z<WORLD_SIZE; z++) grid[0][x][z] = TYPES.GRASS;
-
-        function getBlock(x,y,z) {
-            if(x<0||x>=WORLD_SIZE||y<0||y>=WORLD_SIZE||z<0||z>=WORLD_SIZE) return TYPES.AIR;
-            return grid[y][x][z];
-        }
-
-        function setBlock(x,y,z, type) {
-            if(x<0||x>=WORLD_SIZE||y<0||y>=WORLD_SIZE||z<0||z>=WORLD_SIZE) return;
-            grid[y][x][z] = type;
-            needsRedstoneUpdate = true;
-            buildMeshes();
-        }
-
-        // --- LÓGICA REDSTONE (CORREGIDA) ---
-        function updateRedstone() {
-            for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) powerGrid[y][x][z] = 0;
-            let queue = [];
-
-            for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
-                if(grid[y][x][z] === TYPES.LEVER_ON) { powerGrid[y][x][z] = 15; queue.push({x,y,z,p:15}); }
-            }
-
-            while(queue.length > 0) {
-                const curr = queue.shift();
-                const neighbors = [
-                    {x: curr.x+1, y: curr.y, z: curr.z}, {x: curr.x-1, y: curr.y, z: curr.z},
-                    {x: curr.x, y: curr.y+1, z: curr.z}, {x: curr.x, y: curr.y-1, z: curr.z},
-                    {x: curr.x, y: curr.y, z: curr.z+1}, {x: curr.x, y: curr.y, z: curr.z-1}
-                ];
-                for(let n of neighbors) {
-                    let type = getBlock(n.x, n.y, n.z);
-                    if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.GRASS) continue;
-                    let newPower = 0;
-                    if(type === TYPES.DUST_OFF || type === TYPES.DUST_ON) newPower = curr.p - 1;
-                    else if(type === TYPES.SOLID || type === TYPES.LEVER_OFF || type === TYPES.LEVER_ON || type === TYPES.LAMP_OFF || type === TYPES.LAMP_ON) newPower = curr.p;
-                    else if(type === TYPES.TORCH_OFF) { if(curr.y === n.y - 1 && curr.p > 0) newPower = 0; else continue; }
-                    else if(type === TYPES.TORCH_ON) continue;
-
-                    if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
-                        powerGrid[n.y][n.x][n.z] = newPower;
-                        queue.push({x: n.x, y: n.y, z: n.z, p: newPower});
-                    }
-                }
-            }
-
-            for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
-                let p = powerGrid[y][x][z]; let type = grid[y][x][z];
-                if(type === TYPES.DUST_OFF && p > 0) grid[y][x][z] = TYPES.DUST_ON;
-                if(type === TYPES.DUST_ON && p === 0) grid[y][x][z] = TYPES.DUST_OFF;
-                if(type === TYPES.LAMP_OFF && p > 0) grid[y][x][z] = TYPES.LAMP_ON;
-                if(type === TYPES.LAMP_ON && p === 0) grid[y][x][z] = TYPES.LAMP_OFF;
-                if(type === TYPES.TORCH_ON && getBlock(x, y-1, z) !== TYPES.AIR && powerGrid[y-1][x][z] > 0) grid[y][x][z] = TYPES.TORCH_OFF;
-                else if(type === TYPES.TORCH_OFF && (getBlock(x, y-1, z) === TYPES.AIR || powerGrid[y-1][x][z] === 0)) {
-                    grid[y][x][z] = TYPES.TORCH_ON; powerGrid[y][x][z] = 15; queue.push({x,y,z,p:15});
-                }
-            }
-
-            if(queue.length > 0) {
-                while(queue.length > 0) {
-                    const curr = queue.shift();
-                    const neighbors = [
-                        {x: curr.x+1, y: curr.y, z: curr.z}, {x: curr.x-1, y: curr.y, z: curr.z},
-                        {x: curr.x, y: curr.y+1, z: curr.z}, {x: curr.x, y: curr.y-1, z: curr.z},
-                        {x: curr.x, y: curr.y, z: curr.z+1}, {x: curr.x, y: curr.y, z: curr.z-1}
-                    ];
-                    for(let n of neighbors) {
-                        let type = getBlock(n.x, n.y, n.z);
-                        if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.GRASS || type === TYPES.TORCH_ON || type === TYPES.TORCH_OFF) continue;
-                        let newPower = (type === TYPES.DUST_ON || type === TYPES.DUST_OFF) ? curr.p - 1 : curr.p;
-                        if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
-                            powerGrid[n.y][n.x][n.z] = newPower; queue.push({x: n.x, y: n.y, z: n.z, p: newPower});
-                            // AQUÍ ESTABA EL FALLO CRÍTICO: FALTABA LA 'n.' EN LA 'Z'
-                            if(type === TYPES.DUST_OFF) grid[n.y][n.x][n.z] = TYPES.DUST_ON;
-                            if(type === TYPES.LAMP_OFF) grid[n.y][n.x][n.z] = TYPES.LAMP_ON;
-                        }
-                    }
-                }
-            }
-            buildMeshes();
-        }
-
-        // --- THREE.JS SETUP ---
+        // --- INICIALIZAR THREE.JS ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB);
-        scene.fog = new THREE.Fog(0x87CEEB, 20, 40);
+        scene.background = new THREE.Color(0x87CEEB); // Cielo azul
+        scene.fog = new THREE.Fog(0x87CEEB, 40, 80);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-        camera.position.set(8, 3, 8);
-
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+        
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 10, 5);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040));
+        // Luces
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        dirLight.position.set(50, 100, 50);
+        scene.add(dirLight);
 
-        // CAJA DE SELECCIÓN
-        const selectionBoxGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
-        const selectionBoxEdges = new THREE.EdgesGeometry(selectionBoxGeo);
-        const selectionBoxLine = new THREE.LineSegments(selectionBoxEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
-        selectionBoxLine.visible = false;
-        scene.add(selectionBoxLine);
+        // --- CREAR TEXTURA DE PASTO (CANVAS) ---
+        const grassCanvas = document.createElement('canvas');
+        grassCanvas.width = 16; grassCanvas.height = 16;
+        const gCtx = grassCanvas.getContext('2d');
+        // Base verde
+        gCtx.fillStyle = '#5D8C3E'; gCtx.fillRect(0, 0, 16, 16);
+        // Píxeles aleatorios para darle textura
+        gCtx.fillStyle = '#4A7A32';
+        for(let i=0; i<30; i++) gCtx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 1, 1);
+        gCtx.fillStyle = '#6B9E4A';
+        for(let i=0; i<20; i++) gCtx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 1, 1);
+        
+        const grassTexture = new THREE.CanvasTexture(grassCanvas);
+        grassTexture.magFilter = THREE.NearestFilter;
+        grassTexture.minFilter = THREE.NearestFilter;
 
-        // --- MESHING ---
-        const meshes = {};
-        function buildMeshes() {
-            for(let key in meshes) { scene.remove(meshes[key]); meshes[key].dispose(); }
-            const counts = {}; const positions = {};
-
-            for(let y=0; y<WORLD_SIZE; y++) {
-                for(let x=0; x<WORLD_SIZE; x++) {
-                    for(let z=0; z<WORLD_SIZE; z++) {
-                        let type = grid[y][x][z];
-                        if(type === TYPES.AIR) continue;
-                        let neighbors = [ getBlock(x+1,y,z), getBlock(x-1,y,z), getBlock(x,y+1,z), getBlock(x,y-1,z), getBlock(x,y,z+1), getBlock(x,y,z-1) ];
-                        let isHidden = neighbors.every(n => n !== TYPES.AIR && n !== TYPES.GLASS && n !== TYPES.DUST_ON && n !== TYPES.DUST_OFF && n !== TYPES.TORCH_ON && n !== TYPES.TORCH_OFF && n !== TYPES.LEVER_ON && n !== TYPES.LEVER_OFF);
-                        if(isHidden && type !== TYPES.GLASS) continue;
-
-                        if(!counts[type]) { counts[type] = 0; positions[type] = []; }
-                        counts[type]++;
-                        positions[type].push(x, y, z);
-                    }
-                }
-            }
-
-            const dummy = new THREE.Object3D();
-            for(let type in counts) {
-                let mesh = new THREE.InstancedMesh(geoMap[type], materials[type], counts[type]);
-                let pos = positions[type];
-                for(let i=0; i<counts[type]; i++) {
-                    dummy.position.set(pos[i*3] + 0.5, pos[i*3+1] + 0.5, pos[i*3+2] + 0.5);
-                    dummy.updateMatrix();
-                    mesh.setMatrixAt(i, dummy.matrix);
-                }
-                scene.add(mesh);
-                meshes[type] = mesh;
+        // --- GENERAR SUELO 64x64 (INSTANCED MESH PARA RENDIMIENTO) ---
+        const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+        const blockMat = new THREE.MeshLambertMaterial({ map: grassTexture });
+        const floorMesh = new THREE.InstancedMesh(blockGeo, blockMat, WORLD_SIZE * WORLD_SIZE);
+        
+        const dummy = new THREE.Object3D();
+        let index = 0;
+        for (let x = 0; x < WORLD_SIZE; x++) {
+            for (let z = 0; z < WORLD_SIZE; z++) {
+                dummy.position.set(x + 0.5, 0.5, z + 0.5); // Bloques centrados en su espacio
+                dummy.updateMatrix();
+                floorMesh.setMatrixAt(index, dummy.matrix);
+                index++;
             }
         }
-        buildMeshes();
+        scene.add(floorMesh);
 
-        // --- CONTROLES FPS ---
-        let isLocked = false;
-        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+        // --- ESTADO DEL JUGADOR ---
+        // El jugador empieza en el centro del mundo
+        camera.position.set(WORLD_SIZE / 2, PLAYER_HEIGHT + 1, WORLD_SIZE / 2);
         const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
+        let isLocked = false;
+        let canJump = true;
+
+        // --- CONTROLES TECLADO ---
         const keys = { w: false, a: false, s: false, d: false, space: false };
 
-        document.getElementById('instructions').addEventListener('click', () => renderer.domElement.requestPointerLock());
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key in keys) keys[key] = true;
+            if (e.code === 'Space') { keys.space = true; e.preventDefault(); } // Evitar scroll
+        });
+
+        document.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (key in keys) keys[key] = false;
+            if (e.code === 'Space') keys.space = false;
+        });
+
+        // --- CONTROLES RATÓN (FIRST PERSON) ---
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+
+        document.getElementById('instructions').addEventListener('click', () => {
+            renderer.domElement.requestPointerLock();
+        });
+
         document.addEventListener('pointerlockchange', () => {
             isLocked = document.pointerLockElement === renderer.domElement;
-            document.getElementById('instructions').style.display = isLocked ? 'none' : 'block";
+            document.getElementById('instructions').style.display = isLocked ? 'none' : 'flex';
         });
+
         document.addEventListener('mousemove', (e) => {
             if (!isLocked) return;
             euler.setFromQuaternion(camera.quaternion);
-            euler.y -= e.movementX * 0.002; euler.x -= e.movementY * 0.002;
-            euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, euler.x));
+            euler.y -= e.movementX * 0.002;
+            euler.x -= e.movementY * 0.002;
+            // Limitar para que no mire de vuelta completa
+            euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
             camera.quaternion.setFromEuler(euler);
         });
-        document.addEventListener('keydown', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; if(e.code==='Space'){keys.space=true; e.preventDefault();} });
-        document.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; if(e.code==='Space') keys.space=false; });
 
-        // --- UI HOTBAR ---
-        const slots = document.querySelectorAll('.slot');
-        const typesMap = ['solid', 'glass', 'dust_off', 'torch_off', 'lamp_off', 'lever_off'];
-        const idToType = { solid: TYPES.SOLID, glass: TYPES.GLASS, dust_off: TYPES.DUST_OFF, torch_off: TYPES.TORCH_OFF, lamp_off: TYPES.LAMP_OFF, lever_off: TYPES.LEVER_OFF };
-        slots.forEach((slot, i) => { let img = document.createElement('img'); img.src = textures[typesMap[i]].image.toDataURL(); slot.prepend(img); });
-        
-        function updateHotbar(index) {
-            slots.forEach(s => s.classList.remove('active'));
-            slots[index].classList.add('active');
-            selectedBlockType = idToType[typesMap[index]];
-        }
-        document.addEventListener('wheel', (e) => { let curr = Array.from(slots).findIndex(s => s.classList.contains('active')); updateHotbar(e.deltaY > 0 ? (curr + 1) % 6 : (curr - 1 + 6) % 6); });
-        window.addEventListener('keydown', (e) => { let num = parseInt(e.key); if(num >= 1 && num <= 6) updateHotbar(num - 1); });
-
-        // --- RAYCASTING ---
-        const raycaster = new THREE.Raycaster();
-        raycaster.far = 8;
-        const center = new THREE.Vector2(0, 0);
-
-        document.addEventListener('mousedown', (e) => {
-            if (!isLocked || !lookAtBlock) return;
-            const {x: bx, y: by, z: bz} = lookAtBlock;
-
-            if (e.button === 0) { 
-                if(getBlock(bx, by, bz) !== TYPES.AIR) { grid[by][bx][bz] = TYPES.AIR; needsRedstoneUpdate = true; buildMeshes(); }
-            } else if (e.button === 2) { 
-                const px = bx + lookAtNormal.x;
-                const py = by + lookAtNormal.y;
-                const pz = bz + lookAtNormal.z;
-
-                const pMinX = camera.position.x - 0.3, pMaxX = camera.position.x + 0.3;
-                const pMinY = camera.position.y - 1.5, pMaxY = camera.position.y + 0.2;
-                const pMinZ = camera.position.z - 0.3, pMaxZ = camera.position.z + 0.3;
-
-                if (px+1 > pMinX && px < pMaxX && py+1 > pMinY && py < pMaxY && pz+1 > pMinZ && pz < pMaxZ) return;
-
-                if(getBlock(px, py, pz) === TYPES.AIR) {
-                    if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_OFF) grid[by][bx][bz] = TYPES.LEVER_ON;
-                    else if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_ON) grid[by][bx][bz] = TYPES.LEVER_OFF;
-                    else grid[py][px][pz] = selectedBlockType;
-                    needsRedstoneUpdate = true; buildMeshes();
-                }
-            }
-        });
-        document.addEventListener('contextmenu', e => e.preventDefault());
-
-        // --- FÍSICAS Y LOOP ---
-        const clock = new THREE.Clock();
-        let canJump = true;
-
+        // --- LÓGICA DE COLISIONES SIMPLES ---
+        // En este momento solo comprobamos el suelo (y=0) y los bordes del mundo
         function checkCollision(x, y, z) {
-            const margin = 0.3; const height = 1.6;
-            for(let dy = 0; dy <= height; dy += 0.5) {
-                let t1 = getBlock(Math.floor(x + margin), Math.floor(y + dy), Math.floor(z + margin));
-                let t2 = getBlock(Math.floor(x - margin), Math.floor(y + dy), Math.floor(z - margin));
-                if(t1 !== TYPES.AIR && t1 !== TYPES.GLASS && t1 !== TYPES.DUST_OFF && t1 !== TYPES.DUST_ON && t1 !== TYPES.TORCH_OFF && t1 !== TYPES.TORCH_ON && t1 !== TYPES.LEVER_OFF && t1 !== TYPES.LEVER_ON) return true;
-                if(t2 !== TYPES.AIR && t2 !== TYPES.GLASS && t2 !== TYPES.DUST_OFF && t2 !== TYPES.DUST_ON && t2 !== TYPES.TORCH_OFF && t2 !== TYPES.TORCH_ON && t2 !== TYPES.LEVER_OFF && t2 !== TYPES.LEVER_ON) return true;
+            const feetY = y - PLAYER_HEIGHT;
+            
+            // 1. Límites del mundo (paredes invisibles)
+            if (x - PLAYER_RADIUS < 0 || x + PLAYER_RADIUS > WORLD_SIZE || 
+                z - PLAYER_RADIUS < 0 || z + PLAYER_RADIUS > WORLD_SIZE) {
+                return true;
             }
+
+            // 2. Suelo
+            if (feetY <= 0) return true;
+
             return false;
         }
 
+        // --- LOOP PRINCIPAL DE FÍSICAS Y RENDERIZADO ---
+        const clock = new THREE.Clock();
+
         function animate() {
             requestAnimationFrame(animate);
-            const delta = Math.min(clock.getDelta(), 0.1);
-
-            if (needsRedstoneUpdate) { updateRedstone(); needsRedstoneUpdate = false; }
+            const delta = Math.min(clock.getDelta(), 0.1); // Cap delta para evitar bugs al cambiar pestaña
 
             if (isLocked) {
-                raycaster.setFromCamera(center, camera);
-                const intersects = raycaster.intersectObjects(Object.values(meshes));
-                if (intersects.length > 0) {
-                    const intersect = intersects[0];
-                    // Cálculo exacto para evitar errores en los bordes de los bloques
-                    const pos = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01));
-                    lookAtBlock = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
-                    lookAtNormal = intersect.face.normal;
-                    selectionBoxLine.position.set(lookAtBlock.x + 0.5, lookAtBlock.y + 0.5, lookAtBlock.z + 0.5);
-                    selectionBoxLine.visible = true;
-                } else {
-                    lookAtBlock = null; lookAtNormal = null;
-                    selectionBoxLine.visible = false;
+                // 1. Calcular dirección de movimiento basada en dónde mira la cámara
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                forward.y = 0; forward.normalize(); // Movemos solo en el plano XZ
+                
+                const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+                // 2. Aplicar velocidad horizontal
+                velocity.x = 0;
+                velocity.z = 0;
+
+                if (keys.w) { velocity.x += forward.x; velocity.z += forward.z; }
+                if (keys.s) { velocity.x -= forward.x; velocity.z -= forward.z; }
+                if (keys.d) { velocity.x += right.x; velocity.z += right.z; }
+                if (keys.a) { velocity.x -= right.x; velocity.z -= right.z; }
+
+                // Normalizar y aplicar velocidad
+                if (velocity.x !== 0 || velocity.z !== 0) {
+                    velocity.normalize().multiplyScalar(MOVE_SPEED);
                 }
-            } else {
-                selectionBoxLine.visible = false;
-            }
 
-            if (isLocked) {
-                velocity.x *= 0.8; velocity.z *= 0.8;
-                direction.z = Number(keys.w) - Number(keys.s);
-                direction.x = Number(keys.d) - Number(keys.a);
-                direction.normalize();
+                // 3. Aplicar Gravedad y Salto
+                velocity.y -= GRAVITY * delta;
+                if (keys.space && canJump) {
+                    velocity.y = JUMP_FORCE;
+                    canJump = false;
+                }
 
-                const speed = 5.0;
-                const forward = new THREE.Vector3(); camera.getWorldDirection(forward); forward.y = 0; forward.normalize();
-                const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
-
-                velocity.x += (forward.x * direction.z + right.x * direction.x) * speed * delta;
-                velocity.z += (forward.z * direction.z + right.z * direction.x) * speed * delta;
-                velocity.y -= 20 * delta;
-                if(keys.space && canJump) { velocity.y = 8; canJump = false; }
-
+                // 4. Mover y colisionar por Ejes (X, luego Z, luego Y)
+                // Esto permite "deslizarse" por las paredes
                 let nextX = camera.position.x + velocity.x * delta;
-                if(!checkCollision(nextX, camera.position.y - 1.5, camera.position.z)) camera.position.x = nextX; else velocity.x = 0;
+                if (!checkCollision(nextX, camera.position.y, camera.position.z)) {
+                    camera.position.x = nextX;
+                }
 
                 let nextZ = camera.position.z + velocity.z * delta;
-                if(!checkCollision(camera.position.x, camera.position.y - 1.5, nextZ)) camera.position.z = nextZ; else velocity.z = 0;
+                if (!checkCollision(camera.position.x, camera.position.y, nextZ)) {
+                    camera.position.z = nextZ;
+                }
 
                 let nextY = camera.position.y + velocity.y * delta;
-                if(!checkCollision(camera.position.x, nextY - 1.5, camera.position.z)) { camera.position.y = nextY; canJump = false; }
-                else { if(velocity.y < 0) canJump = true; velocity.y = 0; }
-
-                camera.position.x = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.x));
-                camera.position.z = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.z));
-                if(camera.position.y < 1.5) { camera.position.y = 1.5; velocity.y = 0; canJump = true; }
+                if (!checkCollision(camera.position.x, nextY, camera.position.z)) {
+                    camera.position.y = nextY;
+                    canJump = false; // Está en el aire
+                } else {
+                    // Si chocó verticalmente
+                    if (velocity.y < 0) canJump = true; // Chocó contra el suelo
+                    velocity.y = 0; // Detener caída/subida
+                }
             }
 
             renderer.render(scene, camera);
         }
 
-        window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        // Adaptar al tamaño de la ventana
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Iniciar
         animate();
     </script>
 </body>
