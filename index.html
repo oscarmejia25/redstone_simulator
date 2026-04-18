@@ -3,35 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redstone Sandbox - Base</title>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; user-select: none; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
-        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-shadow: 1px 1px 2px black; }
-        #instructions { color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; }
-        #instructions h1 { margin-top: 0; color: #ff5555; }
-        #hotbar { display: flex; gap: 5px; margin-bottom: 10px; }
-        .slot { width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 2px solid #555; }
-        .slot.active { border-color: #fff; background: rgba(255,255,255,0.2); }
-    </style>
-</head>
-<body>
-    <div id="ui">
-        <div id="crosshair">+</div>
-        <div id="instructions">
-            <h1>Redstone Sandbox</h1>
-            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar</p>
-        </div>
-        <div id="hotbar">
-            <div class="slot active"></div>
-            <div class="slot"></div>
-            <div class="slot"></div>
-            <div class="slot"></div>
-            <div class="slot"></div>
-            <div class="slot"></div>
-        </div>
-    </div>
-
+    <title>Redstone Sandbox</title>
     <script type="importmap">
         {
             "imports": {
@@ -40,200 +12,28 @@
             }
         }
     </script>
-    <script type="module">
-        import * as THREE from 'three';
-
-        // --- CONFIGURACIÓN BÁSICA ---
-        const WORLD_SIZE = 64;
-        const PLAYER_HEIGHT = 1.6; // Altura de los ojos
-        const PLAYER_RADIUS = 0.3; // Ancho del jugador para colisiones
-        const GRAVITY = 25;
-        const JUMP_FORCE = 9;
-        const MOVE_SPEED = 6;
-
-        // --- INICIALIZAR THREE.JS ---
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // Cielo azul
-        scene.fog = new THREE.Fog(0x87CEEB, 40, 80);
-
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    
+    <div id="ui">
+        <div id="crosshair">+</div>
         
-        const renderer = new THREE.WebGLRenderer({ antialias: false });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
-
-        // Luces
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-        scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-        dirLight.position.set(50, 100, 50);
-        scene.add(dirLight);
-
-        // --- CREAR TEXTURA DE PASTO (CANVAS) ---
-        const grassCanvas = document.createElement('canvas');
-        grassCanvas.width = 16; grassCanvas.height = 16;
-        const gCtx = grassCanvas.getContext('2d');
-        // Base verde
-        gCtx.fillStyle = '#5D8C3E'; gCtx.fillRect(0, 0, 16, 16);
-        // Píxeles aleatorios para darle textura
-        gCtx.fillStyle = '#4A7A32';
-        for(let i=0; i<30; i++) gCtx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 1, 1);
-        gCtx.fillStyle = '#6B9E4A';
-        for(let i=0; i<20; i++) gCtx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 1, 1);
+        <div id="instructions">
+            <h1>Redstone Sandbox</h1>
+            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar | Doble Espacio: Volar<br>Clic Izq: Romper | Clic Der: Poner</p>
+        </div>
         
-        const grassTexture = new THREE.CanvasTexture(grassCanvas);
-        grassTexture.magFilter = THREE.NearestFilter;
-        grassTexture.minFilter = THREE.NearestFilter;
+        <div id="hotbar">
+            <div class="slot active" data-block="1"><img src="" alt="Piedra"><span>1</span></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+        </div>
+    </div>
 
-        // --- GENERAR SUELO 64x64 (INSTANCED MESH PARA RENDIMIENTO) ---
-        const blockGeo = new THREE.BoxGeometry(1, 1, 1);
-        const blockMat = new THREE.MeshLambertMaterial({ map: grassTexture });
-        const floorMesh = new THREE.InstancedMesh(blockGeo, blockMat, WORLD_SIZE * WORLD_SIZE);
-        
-        const dummy = new THREE.Object3D();
-        let index = 0;
-        for (let x = 0; x < WORLD_SIZE; x++) {
-            for (let z = 0; z < WORLD_SIZE; z++) {
-                dummy.position.set(x + 0.5, 0.5, z + 0.5); // Bloques centrados en su espacio
-                dummy.updateMatrix();
-                floorMesh.setMatrixAt(index, dummy.matrix);
-                index++;
-            }
-        }
-        scene.add(floorMesh);
-
-        // --- ESTADO DEL JUGADOR ---
-        // El jugador empieza en el centro del mundo
-        camera.position.set(WORLD_SIZE / 2, PLAYER_HEIGHT + 1, WORLD_SIZE / 2);
-        const velocity = new THREE.Vector3();
-        let isLocked = false;
-        let canJump = true;
-
-        // --- CONTROLES TECLADO ---
-        const keys = { w: false, a: false, s: false, d: false, space: false };
-
-        document.addEventListener('keydown', (e) => {
-            const key = e.key.toLowerCase();
-            if (key in keys) keys[key] = true;
-            if (e.code === 'Space') { keys.space = true; e.preventDefault(); } // Evitar scroll
-        });
-
-        document.addEventListener('keyup', (e) => {
-            const key = e.key.toLowerCase();
-            if (key in keys) keys[key] = false;
-            if (e.code === 'Space') keys.space = false;
-        });
-
-        // --- CONTROLES RATÓN (FIRST PERSON) ---
-        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
-
-        document.getElementById('instructions').addEventListener('click', () => {
-            renderer.domElement.requestPointerLock();
-        });
-
-        document.addEventListener('pointerlockchange', () => {
-            isLocked = document.pointerLockElement === renderer.domElement;
-            document.getElementById('instructions').style.display = isLocked ? 'none' : 'flex';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isLocked) return;
-            euler.setFromQuaternion(camera.quaternion);
-            euler.y -= e.movementX * 0.002;
-            euler.x -= e.movementY * 0.002;
-            // Limitar para que no mire de vuelta completa
-            euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, euler.x));
-            camera.quaternion.setFromEuler(euler);
-        });
-
-        // --- LÓGICA DE COLISIONES SIMPLES ---
-        // En este momento solo comprobamos el suelo (y=0) y los bordes del mundo
-        function checkCollision(x, y, z) {
-            const feetY = y - PLAYER_HEIGHT;
-            
-            // 1. Límites del mundo (paredes invisibles)
-            if (x - PLAYER_RADIUS < 0 || x + PLAYER_RADIUS > WORLD_SIZE || 
-                z - PLAYER_RADIUS < 0 || z + PLAYER_RADIUS > WORLD_SIZE) {
-                return true;
-            }
-
-            // 2. Suelo
-            if (feetY <= 0) return true;
-
-            return false;
-        }
-
-        // --- LOOP PRINCIPAL DE FÍSICAS Y RENDERIZADO ---
-        const clock = new THREE.Clock();
-
-        function animate() {
-            requestAnimationFrame(animate);
-            const delta = Math.min(clock.getDelta(), 0.1); // Cap delta para evitar bugs al cambiar pestaña
-
-            if (isLocked) {
-                // 1. Calcular dirección de movimiento basada en dónde mira la cámara
-                const forward = new THREE.Vector3();
-                camera.getWorldDirection(forward);
-                forward.y = 0; forward.normalize(); // Movemos solo en el plano XZ
-                
-                const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
-
-                // 2. Aplicar velocidad horizontal
-                velocity.x = 0;
-                velocity.z = 0;
-
-                if (keys.w) { velocity.x += forward.x; velocity.z += forward.z; }
-                if (keys.s) { velocity.x -= forward.x; velocity.z -= forward.z; }
-                if (keys.d) { velocity.x += right.x; velocity.z += right.z; }
-                if (keys.a) { velocity.x -= right.x; velocity.z -= right.z; }
-
-                // Normalizar y aplicar velocidad
-                if (velocity.x !== 0 || velocity.z !== 0) {
-                    velocity.normalize().multiplyScalar(MOVE_SPEED);
-                }
-
-                // 3. Aplicar Gravedad y Salto
-                velocity.y -= GRAVITY * delta;
-                if (keys.space && canJump) {
-                    velocity.y = JUMP_FORCE;
-                    canJump = false;
-                }
-
-                // 4. Mover y colisionar por Ejes (X, luego Z, luego Y)
-                // Esto permite "deslizarse" por las paredes
-                let nextX = camera.position.x + velocity.x * delta;
-                if (!checkCollision(nextX, camera.position.y, camera.position.z)) {
-                    camera.position.x = nextX;
-                }
-
-                let nextZ = camera.position.z + velocity.z * delta;
-                if (!checkCollision(camera.position.x, camera.position.y, nextZ)) {
-                    camera.position.z = nextZ;
-                }
-
-                let nextY = camera.position.y + velocity.y * delta;
-                if (!checkCollision(camera.position.x, nextY, camera.position.z)) {
-                    camera.position.y = nextY;
-                    canJump = false; // Está en el aire
-                } else {
-                    // Si chocó verticalmente
-                    if (velocity.y < 0) canJump = true; // Chocó contra el suelo
-                    velocity.y = 0; // Detener caída/subida
-                }
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        // Adaptar al tamaño de la ventana
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // Iniciar
-        animate();
-    </script>
+    <script type="module" src="./js/main.js"></script>
 </body>
 </html>
