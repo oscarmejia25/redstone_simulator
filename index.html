@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redstone Sandbox 3D</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; user-select: none; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-shadow: 1px 1px 2px black; }
+        #instructions { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; }
+        #instructions h1 { margin-top: 0; color: #ff5555; }
+        #hotbar { display: flex; justify-content: center; gap: 5px; margin-bottom: 10px; pointer-events: auto; }
+        .slot { width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 2px solid #555; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; position: relative; }
+        .slot.active { border-color: #fff; background: rgba(255,255,255,0.2); }
+        .slot img { width: 40px; height: 40px; image-rendering: pixelated; }
+        .slot span { position: absolute; bottom: 2px; right: 5px; font-size: 10px; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <div id="crosshair">+</div>
+        <div id="instructions">
+            <h1>Redstone Sandbox</h1>
+            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar | Shift: Bajar<br>Clic Izq: Romper | Clic Der: Poner<br>Rueda/Teclas 1-6: Seleccionar</p>
+        </div>
+        <div id="hotbar">
+            <div class="slot active" data-id="solid"><span>1</span></div>
+            <div class="slot" data-id="glass"><span>2</span></div>
+            <div class="slot" data-id="dust_off"><span>3</span></div>
+            <div class="slot" data-id="torch_off"><span>4</span></div>
+            <div class="slot" data-id="lamp_off"><span>5</span></div>
+            <div class="slot" data-id="lever_off"><span>6</span></div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- CONSTANTES Y CONFIGURACIÓN ---
+        const BLOCK_SIZE = 1;
+        const WORLD_SIZE = 16;
+        const TYPES = {
+            AIR: 0, SOLID: 1, GLASS: 2, 
+            DUST_OFF: 3, DUST_ON: 4, 
+            TORCH_OFF: 5, TORCH_ON: 6, 
+            LAMP_OFF: 7, LAMP_ON: 8, 
+            LEVER_OFF: 9, LEVER_ON: 10
+        };
+
+        let selectedBlockType = TYPES.SOLID;
+        let needsRedstoneUpdate = false;
+
+        // --- GENERADOR DE TEXTURAS (CANVAS 16x16) ---
+        function createTexture(drawFunc) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 16; canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            drawFunc(ctx);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            tex.minFilter = THREE.NearestFilter;
+            return tex;
+        }
+
+        const textures = {
+            solid: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#777'; for(let i=0;i<20;i++) ctx.fillRect(Math.random()*14, Math.random()*14, 2, 2); }),
+            glass: createTexture(ctx => { ctx.fillStyle = 'rgba(200, 230, 255, 0.3)'; ctx.fillRect(0,0,16,16); ctx.strokeStyle = '#aaddff'; ctx.lineWidth = 1; ctx.strokeRect(0.5,0.5,15,15); ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(8,16); ctx.stroke(); }),
+            dust_off: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#300'; ctx.fillRect(2,7,12,2); ctx.fillRect(7,2,2,12); }),
+            dust_on: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#f00'; ctx.fillRect(2,7,12,2); ctx.fillRect(7,2,2,12); ctx.fillStyle = '#f55'; ctx.fillRect(7,7,2,2); }),
+            torch_off: createTexture(ctx => { ctx.fillStyle = '#654'; ctx.fillRect(7,4,2,12); ctx.fillStyle = '#500'; ctx.fillRect(6,2,4,4); }),
+            torch_on: createTexture(ctx => { ctx.fillStyle = '#654'; ctx.fillRect(7,4,2,12); ctx.fillStyle = '#f00'; ctx.fillRect(6,2,4,4); ctx.fillStyle = '#f55'; ctx.fillRect(7,3,2,2); }),
+            lamp_off: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#555'; ctx.fillRect(4,4,8,8); }),
+            lamp_on: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#ffdd44'; ctx.fillRect(4,4,8,8); ctx.fillStyle = '#ffffaa'; ctx.fillRect(6,6,4,4); }),
+            lever_off: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#654'; ctx.fillRect(7,8,2,8); ctx.fillStyle = '#888'; ctx.fillRect(6,6,4,4); }),
+            lever_on: createTexture(ctx => { ctx.fillStyle = '#888'; ctx.fillRect(0,0,16,16); ctx.fillStyle = '#654'; ctx.fillRect(7,8,2,4); ctx.fillRect(11,6,4,2); ctx.fillStyle = '#888'; ctx.fillRect(6,6,4,4); })
+        };
+
+        const materials = {
+            [TYPES.SOLID]: new THREE.MeshLambertMaterial({ map: textures.solid }),
+            [TYPES.GLASS]: new THREE.MeshLambertMaterial({ map: textures.glass, transparent: true, opacity: 0.5 }),
+            [TYPES.DUST_OFF]: new THREE.MeshLambertMaterial({ map: textures.dust_off }),
+            [TYPES.DUST_ON]: new THREE.MeshBasicMaterial({ map: textures.dust_on }), // Emissive fake
+            [TYPES.TORCH_OFF]: new THREE.MeshLambertMaterial({ map: textures.torch_off }),
+            [TYPES.TORCH_ON]: new THREE.MeshBasicMaterial({ map: textures.torch_on }),
+            [TYPES.LAMP_OFF]: new THREE.MeshLambertMaterial({ map: textures.lamp_off }),
+            [TYPES.LAMP_ON]: new THREE.MeshBasicMaterial({ map: textures.lamp_on }),
+            [TYPES.LEVER_OFF]: new THREE.MeshLambertMaterial({ map: textures.lever_off }),
+            [TYPES.LEVER_ON]: new THREE.MeshBasicMaterial({ map: textures.lever_on })
+        };
+
+        // --- LÓGICA DEL MUNDO (VOXELS) ---
+        // Grid[Y][X][Z]
+        let grid = new Array(WORLD_SIZE).fill(null).map(() => 
+            new Array(WORLD_SIZE).fill(null).map(() => 
+                new Array(WORLD_SIZE).fill(TYPES.AIR)
+            )
+        );
+        let powerGrid = new Array(WORLD_SIZE).fill(null).map(() => 
+            new Array(WORLD_SIZE).fill(null).map(() => 
+                new Array(WORLD_SIZE).fill(0)
+            )
+        );
+
+        // Inicializar suelo
+        for(let x=0; x<WORLD_SIZE; x++) for(let z=0; z<WORLD_SIZE; z++) grid[0][x][z] = TYPES.SOLID;
+
+        function getBlock(x,y,z) {
+            if(x<0||x>=WORLD_SIZE||y<0||y>=WORLD_SIZE||z<0||z>=WORLD_SIZE) return TYPES.AIR;
+            return grid[y][x][z];
+        }
+
+        function setBlock(x,y,z, type) {
+            if(x<0||x>=WORLD_SIZE||y<0||y>=WORLD_SIZE||z<0||z>=WORLD_SIZE) return;
+            grid[y][x][z] = type;
+            needsRedstoneUpdate = true;
+            buildMeshes();
+        }
+
+        // --- LÓGICA REDSTONE (BFS) ---
+        function updateRedstone() {
+            // Resetear potencia
+            for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) powerGrid[y][x][z] = 0;
+
+            let queue = [];
+
+            // 1. Buscar fuentes primarias (Palancas encendidas)
+            for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
+                if(grid[y][x][z] === TYPES.LEVER_ON) {
+                    powerGrid[y][x][z] = 15;
+                    queue.push({x,y,z,p:15});
+                }
+            }
+
+            // 2. Propagar señal (BFS)
+            while(queue.length > 0) {
+                const curr = queue.shift();
+                const dirs = [[1,0],[0,1],[-1,0],[0,-1],[0,0,1],[0,0,-1]]; // x, z, y offsets
+                // Corrección de direcciones
+                const neighbors = [
+                    {x: curr.x+1, y: curr.y, z: curr.z},
+                    {x: curr.x-1, y: curr.y, z: curr.z},
+                    {x: curr.x, y: curr.y+1, z: curr.z},
+                    {x: curr.x, y: curr.y-1, z: curr.z},
+                    {x: curr.x, y: curr.y, z: curr.z+1},
+                    {x: curr.x, y: curr.y, z: curr.z-1}
+                ];
+
+                for(let n of neighbors) {
+                    let type = getBlock(n.x, n.y, n.z);
+                    if(type === TYPES.AIR || type === TYPES.GLASS) continue; // El vidrio aísla
+
+                    let newPower = 0;
+                    // La señal baja al pasar por polvo, se mantiene en sólidos
+                    if(type === TYPES.DUST_OFF || type === TYPES.DUST_ON) {
+                        newPower = curr.p - 1;
+                    } else if(type === TYPES.SOLID || type === TYPES.LEVER_OFF || type === TYPES.LEVER_ON || type === TYPES.LAMP_OFF || type === TYPES.LAMP_ON) {
+                        newPower = curr.p;
+                    } else if(type === TYPES.TORCH_OFF) {
+                        // Lógica de antorcha: se apaga si el bloque que la sostiene tiene señal
+                        // Asumimos que la antorcha está sobre (y-1)
+                        if(curr.y === n.y - 1 && curr.p > 0) {
+                            newPower = 0; // Forzar apagado
+                        } else {
+                            continue; // No propagar a través de antorchas apagadas
+                        }
+                    } else if(type === TYPES.TORCH_ON) {
+                        continue; // No propagar hacia una antorcha encendida
+                    }
+
+                    if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
+                        powerGrid[n.y][n.x][n.z] = newPower;
+                        queue.push({x: n.x, y: n.y, z: n.z, p: newPower});
+                    }
+                }
+            }
+
+            // 3. Actualizar estados de los bloques basados en powerGrid
+            for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) {
+                let p = powerGrid[y][x][z];
+                let type = grid[y][x][z];
+                
+                if(type === TYPES.DUST_OFF && p > 0) grid[y][x][z] = TYPES.DUST_ON;
+                if(type === TYPES.DUST_ON && p === 0) grid[y][x][z] = TYPES.DUST_OFF;
+                
+                if(type === TYPES.LAMP_OFF && p > 0) grid[y][x][z] = TYPES.LAMP_ON;
+                if(type === TYPES.LAMP_ON && p === 0) grid[y][x][z] = TYPES.LAMP_OFF;
+
+                // Lógica especial Antorcha: Si el bloque de abajo está alimentado, se apaga.
+                if(type === TYPES.TORCH_ON && getBlock(x, y-1, z) !== TYPES.AIR && powerGrid[y-1][x][z] > 0) {
+                    grid[y][x][z] = TYPES.TORCH_OFF;
+                } else if(type === TYPES.TORCH_OFF && (getBlock(x, y-1, z) === TYPES.AIR || powerGrid[y-1][x][z] === 0)) {
+                    grid[y][x][z] = TYPES.TORCH_ON;
+                    // Propagar señal desde la antorcha recién encendida
+                    powerGrid[y][x][z] = 15;
+                    queue.push({x,y,z,p:15});
+                }
+            }
+
+            // Si se encendieron antorchas, volver a propagar para actualizar lo que depende de ellas
+            if(queue.length > 0) {
+                while(queue.length > 0) {
+                    const curr = queue.shift();
+                    const neighbors = [
+                        {x: curr.x+1, y: curr.y, z: curr.z}, {x: curr.x-1, y: curr.y, z: curr.z},
+                        {x: curr.x, y: curr.y+1, z: curr.z}, {x: curr.x, y: curr.y-1, z: curr.z},
+                        {x: curr.x, y: curr.y, z: curr.z+1}, {x: curr.x, y: curr.y, z: curr.z-1}
+                    ];
+                    for(let n of neighbors) {
+                        let type = getBlock(n.x, n.y, n.z);
+                        if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.TORCH_ON || type === TYPES.TORCH_OFF) continue;
+                        let newPower = (type === TYPES.DUST_ON || type === TYPES.DUST_OFF) ? curr.p - 1 : curr.p;
+                        if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
+                            powerGrid[n.y][n.x][n.z] = newPower;
+                            queue.push({x: n.x, y: n.y, z: n.z, p: newPower});
+                            if(type === TYPES.DUST_OFF) grid[n.y][n.x][n.z] = TYPES.DUST_ON;
+                            if(type === TYPES.LAMP_OFF) grid[n.y][n.x][n.z] = TYPES.LAMP_ON;
+                        }
+                    }
+                }
+            }
+            buildMeshes();
+        }
+
+        // --- THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 40);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(8, 3, 8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); // antialias false para look voxel
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(5, 10, 5);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
+
+        // --- MESHING (Instanced Meshes para rendimiento) ---
+        const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        const meshes = {};
+
+        function buildMeshes() {
+            // Limpiar meshes viejos
+            for(let key in meshes) {
+                scene.remove(meshes[key]);
+                meshes[key].dispose();
+            }
+
+            // Agrupar bloques por tipo
+            const counts = {};
+            const positions = {};
+
+            for(let y=0; y<WORLD_SIZE; y++) {
+                for(let x=0; x<WORLD_SIZE; x++) {
+                    for(let z=0; z<WORLD_SIZE; z++) {
+                        let type = grid[y][x][z];
+                        if(type === TYPES.AIR) continue;
+
+                        // Simple Culling: no renderizar si está completamente rodeado de sólidos/no transparentes
+                        let neighbors = [
+                            getBlock(x+1,y,z), getBlock(x-1,y,z),
+                            getBlock(x,y+1,z), getBlock(x,y-1,z),
+                            getBlock(x,y,z+1), getBlock(x,y,z-1)
+                        ];
+                        let isHidden = neighbors.every(n => n !== TYPES.AIR && n !== TYPES.GLASS && n !== TYPES.DUST_ON && n !== TYPES.DUST_OFF && n !== TYPES.TORCH_ON && n !== TYPES.TORCH_OFF && n !== TYPES.LEVER_ON && n !== TYPES.LEVER_OFF);
+                        if(isHidden && type !== TYPES.GLASS) continue;
+
+                        if(!counts[type]) { counts[type] = 0; positions[type] = []; }
+                        counts[type]++;
+                        positions[type].push(x, y, z);
+                    }
+                }
+            }
+
+            // Crear InstancedMeshes
+            const dummy = new THREE.Object3D();
+            for(let type in counts) {
+                let mesh = new THREE.InstancedMesh(blockGeo, materials[type], counts[type]);
+                let pos = positions[type];
+                for(let i=0; i<counts[type]; i++) {
+                    dummy.position.set(pos[i*3] + 0.5, pos[i*3+1] + 0.5, pos[i*3+2] + 0.5);
+                    dummy.updateMatrix();
+                    mesh.setMatrixAt(i, dummy.matrix);
+                }
+                scene.add(mesh);
+                meshes[type] = mesh;
+            }
+        }
+
+        buildMeshes();
+
+        // --- CONTROLES FPS ---
+        let isLocked = false;
+        const euler = new THREE.Euler(0, 0, 0, 'YXZ');
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+
+        document.getElementById('instructions').addEventListener('click', () => {
+            renderer.domElement.requestPointerLock();
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            isLocked = document.pointerLockElement === renderer.domElement;
+            document.getElementById('instructions').style.display = isLocked ? 'none' : 'block';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isLocked) return;
+            euler.setFromQuaternion(camera.quaternion);
+            euler.y -= e.movementX * 0.002;
+            euler.x -= e.movementY * 0.002;
+            euler.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, euler.x));
+            camera.quaternion.setFromEuler(euler);
+        });
+
+        document.addEventListener('keydown', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; switch(e.code){ case 'Space': keys.space=true; e.preventDefault(); break; } });
+        document.addEventListener('keyup', (e) => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; switch(e.code){ case 'Space': keys.space=false; break; } });
+
+        // --- UI HOTBAR ---
+        const slots = document.querySelectorAll('.slot');
+        const typesMap = ['solid', 'glass', 'dust_off', 'torch_off', 'lamp_off', 'lever_off'];
+        const idToType = { solid: TYPES.SOLID, glass: TYPES.GLASS, dust_off: TYPES.DUST_OFF, torch_off: TYPES.TORCH_OFF, lamp_off: TYPES.LAMP_OFF, lever_off: TYPES.LEVER_OFF };
+
+        // Rellenar iconos del hotbar con canvas
+        slots.forEach((slot, i) => {
+            let tex = textures[typesMap[i]];
+            let img = document.createElement('img');
+            img.src = tex.image.toDataURL();
+            slot.prepend(img);
+        });
+
+        function updateHotbar(index) {
+            slots.forEach(s => s.classList.remove('active'));
+            slots[index].classList.add('active');
+            selectedBlockType = idToType[typesMap[index]];
+        }
+
+        document.addEventListener('wheel', (e) => {
+            let curr = Array.from(slots).findIndex(s => s.classList.contains('active'));
+            let next = e.deltaY > 0 ? (curr + 1) % 6 : (curr - 1 + 6) % 6;
+            updateHotbar(next);
+        });
+
+        window.addEventListener('keydown', (e) => {
+            let num = parseInt(e.key);
+            if(num >= 1 && num <= 6) updateHotbar(num - 1);
+        });
+
+        // --- RAYCASTING (Colocar/Romper) ---
+        const raycaster = new THREE.Raycaster();
+        raycaster.far = 8;
+        const center = new THREE.Vector2(0, 0);
+
+        document.addEventListener('mousedown', (e) => {
+            if (!isLocked) return;
+
+            raycaster.setFromCamera(center, camera);
+            const intersects = raycaster.intersectObjects(Object.values(meshes));
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const pos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(-0.5));
+                const bx = Math.floor(pos.x);
+                const by = Math.floor(pos.y);
+                const bz = Math.floor(pos.z);
+
+                if (e.button === 0) { // Romper
+                    if(getBlock(bx, by, bz) !== TYPES.AIR) {
+                        grid[by][bx][bz] = TYPES.AIR;
+                        needsRedstoneUpdate = true;
+                        buildMeshes();
+                    }
+                } else if (e.button === 2) { // Colocar
+                    const placePos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(0.5));
+                    const px = Math.floor(placePos.x);
+                    const py = Math.floor(placePos.y);
+                    const pz = Math.floor(placePos.z);
+
+                    // Evitar colocar dentro del jugador
+                    const playerMinX = camera.position.x - 0.3;
+                    const playerMaxX = camera.position.x + 0.3;
+                    const playerMinY = camera.position.y - 1.5;
+                    const playerMaxY = camera.position.y + 0.2;
+                    const playerMinZ = camera.position.z - 0.3;
+                    const playerMaxZ = camera.position.z + 0.3;
+
+                    if (px+1 > playerMinX && px < playerMaxX &&
+                        py+1 > playerMinY && py < playerMaxY &&
+                        pz+1 > playerMinZ && pz < playerMaxZ) return;
+
+                    if(getBlock(px, py, pz) === TYPES.AIR) {
+                        // Lógica especial para palanca (clic derecho cambia estado si ya existe)
+                        if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_OFF) {
+                            grid[by][bx][bz] = TYPES.LEVER_ON;
+                        } else if(selectedBlockType === TYPES.LEVER_OFF && getBlock(bx, by, bz) === TYPES.LEVER_ON) {
+                            grid[by][bx][bz] = TYPES.LEVER_OFF;
+                        } else {
+                            grid[py][px][pz] = selectedBlockType;
+                        }
+                        needsRedstoneUpdate = true;
+                        buildMeshes();
+                    }
+                }
+            }
+        });
+
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // --- FÍSICAS BÁSICAS Y LOOP ---
+        const clock = new THREE.Clock();
+        let canJump = true;
+
+        function checkCollision(x, y, z) {
+            // Revisa si un punto choca con un bloque sólido (jugador mide ~0.6x1.8x0.6)
+            const margin = 0.3;
+            const height = 1.6;
+            for(let dy = 0; dy <= height; dy += 0.5) {
+                let type = getBlock(Math.floor(x + margin), Math.floor(y + dy), Math.floor(z + margin));
+                let type2 = getBlock(Math.floor(x - margin), Math.floor(y + dy), Math.floor(z - margin));
+                if(type !== TYPES.AIR && type !== TYPES.GLASS && type !== TYPES.DUST_OFF && type !== TYPES.DUST_ON && type !== TYPES.TORCH_OFF && type !== TYPES.TORCH_ON && type !== TYPES.LEVER_OFF && type !== TYPES.LEVER_ON) return true;
+                if(type2 !== TYPES.AIR && type2 !== TYPES.GLASS && type2 !== TYPES.DUST_OFF && type2 !== TYPES.DUST_ON && type2 !== TYPES.TORCH_OFF && type2 !== TYPES.TORCH_ON && type2 !== TYPES.LEVER_OFF && type2 !== TYPES.LEVER_ON) return true;
+            }
+            return false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1);
+
+            if (needsRedstoneUpdate) {
+                updateRedstone();
+                needsRedstoneUpdate = false;
+            }
+
+            if (isLocked) {
+                // Movimiento
+                velocity.x *= 0.8; velocity.z *= 0.8;
+                direction.z = Number(keys.w) - Number(keys.s);
+                direction.x = Number(keys.d) - Number(keys.a);
+                direction.normalize();
+
+                const speed = 5.0;
+                const forward = new THREE.Vector3();
+                camera.getWorldDirection(forward);
+                forward.y = 0; forward.normalize();
+                const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0,1,0)).normalize();
+
+                velocity.x += (forward.x * direction.z + right.x * direction.x) * speed * delta;
+                velocity.z += (forward.z * direction.z + right.z * direction.x) * speed * delta;
+
+                // Gravedad
+                velocity.y -= 20 * delta;
+                if(keys.space && canJump) { velocity.y = 8; canJump = false; }
+
+                // Eje X
+                let nextX = camera.position.x + velocity.x * delta;
+                if(!checkCollision(nextX, camera.position.y - 1.5, camera.position.z)) {
+                    camera.position.x = nextX;
+                } else { velocity.x = 0; }
+
+                // Eje Z
+                let nextZ = camera.position.z + velocity.z * delta;
+                if(!checkCollision(camera.position.x, camera.position.y - 1.5, nextZ)) {
+                    camera.position.z = nextZ;
+                } else { velocity.z = 0; }
+
+                // Eje Y
+                let nextY = camera.position.y + velocity.y * delta;
+                if(!checkCollision(camera.position.x, nextY - 1.5, camera.position.z)) {
+                    camera.position.y = nextY;
+                    canJump = false;
+                } else {
+                    if(velocity.y < 0) canJump = true; // Toca el suelo
+                    velocity.y = 0;
+                }
+
+                // Limitar mundo
+                camera.position.x = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.x));
+                camera.position.z = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, camera.position.z));
+                if(camera.position.y < 1.5) { camera.position.y = 1.5; velocity.y = 0; canJump = true; }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
