@@ -46,7 +46,6 @@
         import * as THREE from 'three';
         import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-        // --- CONSTANTES Y CONFIGURACIÓN ---
         const BLOCK_SIZE = 1;
         const WORLD_SIZE = 16;
         const TYPES = {
@@ -59,10 +58,10 @@
 
         let selectedBlockType = TYPES.SOLID;
         let needsRedstoneUpdate = false;
-        let lookAtBlock = null; // {x,y,z}
-        let lookAtNormal = null; // {x,y,z}
+        let lookAtBlock = null;
+        let lookAtNormal = null;
 
-        // --- GENERADOR DE TEXTURAS ---
+        // --- TEXTURAS ---
         function createTexture(drawFunc) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
@@ -149,115 +148,98 @@
             })
         };
 
+        // Materiales ordenados según cómo Three.js lee las caras: +X, -X, +Y, -Y, +Z, -Z
         const materials = {
-            // El orden en el array es: [+Y (Top), -Y (Bottom), +Z (Front), -Z (Back), +X (Right), -X (Left)]
             [TYPES.GRASS]: [
-                new THREE.MeshLambertMaterial({ map: textures.grass_top }),
-                new THREE.MeshLambertMaterial({ map: textures.dirt }),
-                new THREE.MeshLambertMaterial({ map: textures.grass_side }),
-                new THREE.MeshLambertMaterial({ map: textures.grass_side }),
-                new THREE.MeshLambertMaterial({ map: textures.grass_side }),
-                new THREE.MeshLambertMaterial({ map: textures.grass_side })
+                new THREE.MeshLambertMaterial({ map: textures.grass_side }), // +X
+                new THREE.MeshLambertMaterial({ map: textures.grass_side }), // -X
+                new THREE.MeshLambertMaterial({ map: textures.grass_top }),  // +Y (Top)
+                new THREE.MeshLambertMaterial({ map: textures.dirt }),       // -Y (Bottom)
+                new THREE.MeshLambertMaterial({ map: textures.grass_side }), // +Z
+                new THREE.MeshLambertMaterial({ map: textures.grass_side })  // -Z
             ],
             [TYPES.SOLID]: new THREE.MeshLambertMaterial({ map: textures.solid }),
             [TYPES.GLASS]: new THREE.MeshLambertMaterial({ map: textures.glass, transparent: true, opacity: 0.5 }),
             [TYPES.DUST_OFF]: new THREE.MeshLambertMaterial({ map: textures.dust_off }),
             [TYPES.DUST_ON]: new THREE.MeshBasicMaterial({ map: textures.dust_on }),
+            // Para antorcha y palanca: El orden es [Cabeza/Mango, Palo/Base] (definido abajo en los grupos)
             [TYPES.TORCH_OFF]: [
                 new THREE.MeshLambertMaterial({ map: textures.torch_head_off }),
-                new THREE.MeshLambertMaterial({ map: textures.torch_head_off }),
-                new THREE.MeshLambertMaterial({ map: textures.torch_stick }),
-                new THREE.MeshLambertMaterial({ map: textures.torch_stick }),
-                new THREE.MeshLambertMaterial({ map: textures.torch_stick }),
                 new THREE.MeshLambertMaterial({ map: textures.torch_stick })
             ],
             [TYPES.TORCH_ON]: [
                 new THREE.MeshBasicMaterial({ map: textures.torch_head_on }),
-                new THREE.MeshBasicMaterial({ map: textures.torch_head_on }),
-                new THREE.MeshBasicMaterial({ map: textures.torch_stick }),
-                new THREE.MeshBasicMaterial({ map: textures.torch_stick }),
-                new THREE.MeshBasicMaterial({ map: textures.torch_stick }),
                 new THREE.MeshBasicMaterial({ map: textures.torch_stick })
             ],
             [TYPES.LAMP_OFF]: new THREE.MeshLambertMaterial({ map: textures.lamp_off }),
             [TYPES.LAMP_ON]: new THREE.MeshBasicMaterial({ map: textures.lamp_on }),
             [TYPES.LEVER_OFF]: [
-                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick })
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick }), 
+                new THREE.MeshLambertMaterial({ map: textures.lever_stick }), 
+                new THREE.MeshLambertMaterial({ map: textures.lever_handle })
             ],
             [TYPES.LEVER_ON]: [
-                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_handle }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
-                new THREE.MeshLambertMaterial({ map: textures.lever_stick }),
-                new THREE.MeshBasicMaterial({ map: textures.lever_stick }),
-                new THREE.MeshBasicMaterial({ map: textures.lever_stick })
+                new THREE.MeshBasicMaterial({ map: textures.lever_stick }), 
+                new THREE.MeshBasicMaterial({ map: textures.lever_stick }), 
+                new THREE.MeshLambertMaterial({ map: textures.lever_handle })
             ]
         };
 
-        // --- GEOMETRÍAS PERSONALIZADAS ---
+        // --- GEOMETRÍAS 3D REALES ---
         const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
 
-        // Polvo de redstone (Plano sobre el suelo del voxel)
+        // Polvo (Cubo muy plano pegado al suelo)
         const dustGeo = new THREE.BoxGeometry(0.8, 0.1, 0.8);
         dustGeo.translate(0, 0.05, 0);
-        dustGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5); // Evitar culling
-        dustGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
+        dustGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
+        dustGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), Math.sqrt(3)/2);
 
-        // Antorcha (Palo + Cabeza)
+        // Antorcha (Combinar palo y cabeza manteniendo sus materiales)
         const torchStickGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
         torchStickGeo.translate(0, 0.25, 0);
         const torchHeadGeo = new THREE.BoxGeometry(0.25, 0.2, 0.25);
         torchHeadGeo.translate(0, 0.55, 0);
         const torchGeo = mergeGeometries([torchStickGeo, torchHeadGeo]);
+        torchGeo.clearGroups();
+        // Asignar material 0 a la cabeza y material 1 al palo
+        for(let i=0; i<6; i++) torchGeo.addGroup(torchHeadGeo.groups[i].start + torchStickGeo.index.count, torchHeadGeo.groups[i].count, 0);
+        for(let i=0; i<6; i++) torchGeo.addGroup(torchStickGeo.groups[i].start, torchStickGeo.groups[i].count, 1);
         torchGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
-        torchGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
+        torchGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), Math.sqrt(3)/2);
 
-        // Palanca Apagada (Mango hacia arriba)
-        const leverBaseGeo = new THREE.BoxGeometry(0.4, 0.2, 0.4);
-        leverBaseGeo.translate(0, 0.1, 0);
-        const leverStickOffGeo = new THREE.BoxGeometry(0.1, 0.5, 0.1);
-        leverStickOffGeo.translate(0, 0.45, 0);
-        const leverHandleOffGeo = new THREE.BoxGeometry(0.2, 0.1, 0.2);
-        leverHandleOffGeo.translate(0, 0.75, 0);
-        const leverOffGeo = mergeGeometries([leverBaseGeo, leverStickOffGeo, leverHandleOffGeo]);
-        leverOffGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
-        leverOffGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
-
-        // Palanca Encendida (Mango hacia un lado)
-        const leverStickOnGeo = new THREE.BoxGeometry(0.5, 0.1, 0.1);
-        leverStickOnGeo.translate(0.2, 0.35, 0);
-        const leverHandleOnGeo = new THREE.BoxGeometry(0.1, 0.2, 0.2);
-        leverHandleOnGeo.translate(0.5, 0.35, 0);
-        const leverOnGeo = mergeGeometries([leverBaseGeo, leverStickOnGeo, leverHandleOnGeo]);
-        leverOnGeo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
-        leverOnGeo.boundingSphere = new THREE.Sphere(0, Math.sqrt(3)/2);
+        // Función auxiliar para crear la palanca (Apagada o Encendida)
+        function createLeverGeo(isOn) {
+            const base = new THREE.BoxGeometry(0.4, 0.2, 0.4).translate(0, 0.1, 0);
+            const stick = isOn ? new THREE.BoxGeometry(0.5, 0.1, 0.1).translate(0.2, 0.35, 0) 
+                              : new THREE.BoxGeometry(0.1, 0.5, 0.1).translate(0, 0.45, 0);
+            const handle = isOn ? new THREE.BoxGeometry(0.1, 0.2, 0.2).translate(0.5, 0.35, 0) 
+                                : new THREE.BoxGeometry(0.2, 0.1, 0.2).translate(0, 0.75, 0);
+            
+            const geo = mergeGeometries([base, stick, handle]);
+            geo.clearGroups();
+            let offset = 0;
+            [base, stick, handle].forEach((g, idx) => {
+                for(let i=0; i<6; i++) geo.addGroup(g.groups[i].start + offset, g.groups[i].count, idx);
+                offset += g.index.count;
+            });
+            geo.boundingBox = new THREE.Box3(-0.5, -0.5, -0.5, 0.5, 0.5, 0.5);
+            geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), Math.sqrt(3)/2);
+            return geo;
+        }
+        const leverOffGeo = createLeverGeo(false);
+        const leverOnGeo = createLeverGeo(true);
 
         const geoMap = {
-            [TYPES.GRASS]: blockGeo,
-            [TYPES.SOLID]: blockGeo,
-            [TYPES.GLASS]: blockGeo,
-            [TYPES.DUST_OFF]: dustGeo,
-            [TYPES.DUST_ON]: dustGeo,
-            [TYPES.TORCH_OFF]: torchGeo,
-            [TYPES.TORCH_ON]: torchGeo,
-            [TYPES.LAMP_OFF]: blockGeo,
-            [TYPES.LAMP_ON]: blockGeo,
-            [TYPES.LEVER_OFF]: leverOffGeo,
-            [TYPES.LEVER_ON]: leverOnGeo
+            [TYPES.GRASS]: blockGeo, [TYPES.SOLID]: blockGeo, [TYPES.GLASS]: blockGeo,
+            [TYPES.DUST_OFF]: dustGeo, [TYPES.DUST_ON]: dustGeo,
+            [TYPES.TORCH_OFF]: torchGeo, [TYPES.TORCH_ON]: torchGeo,
+            [TYPES.LAMP_OFF]: blockGeo, [TYPES.LAMP_ON]: blockGeo,
+            [TYPES.LEVER_OFF]: leverOffGeo, [TYPES.LEVER_ON]: leverOnGeo
         };
 
-        // --- LÓGICA DEL MUNDO (VOXELS) ---
-        let grid = new Array(WORLD_SIZE).fill(null).map(() => 
-            new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(TYPES.AIR))
-        );
-        let powerGrid = new Array(WORLD_SIZE).fill(null).map(() => 
-            new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(0))
-        );
+        // --- LÓGICA DEL MUNDO ---
+        let grid = new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(TYPES.AIR)));
+        let powerGrid = new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(null).map(() => new Array(WORLD_SIZE).fill(0)));
 
         for(let x=0; x<WORLD_SIZE; x++) for(let z=0; z<WORLD_SIZE; z++) grid[0][x][z] = TYPES.GRASS;
 
@@ -273,7 +255,7 @@
             buildMeshes();
         }
 
-        // --- LÓGICA REDSTONE (Sin cambios profundos, funciona igual) ---
+        // --- LÓGICA REDSTONE (CORREGIDA) ---
         function updateRedstone() {
             for(let y=0;y<WORLD_SIZE;y++) for(let x=0;x<WORLD_SIZE;x++) for(let z=0;z<WORLD_SIZE;z++) powerGrid[y][x][z] = 0;
             let queue = [];
@@ -291,7 +273,7 @@
                 ];
                 for(let n of neighbors) {
                     let type = getBlock(n.x, n.y, n.z);
-                    if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.GRASS) continue; // Pasto también aísla
+                    if(type === TYPES.AIR || type === TYPES.GLASS || type === TYPES.GRASS) continue;
                     let newPower = 0;
                     if(type === TYPES.DUST_OFF || type === TYPES.DUST_ON) newPower = curr.p - 1;
                     else if(type === TYPES.SOLID || type === TYPES.LEVER_OFF || type === TYPES.LEVER_ON || type === TYPES.LAMP_OFF || type === TYPES.LAMP_ON) newPower = curr.p;
@@ -331,8 +313,9 @@
                         let newPower = (type === TYPES.DUST_ON || type === TYPES.DUST_OFF) ? curr.p - 1 : curr.p;
                         if(newPower > powerGrid[n.y][n.x][n.z] && newPower > 0) {
                             powerGrid[n.y][n.x][n.z] = newPower; queue.push({x: n.x, y: n.y, z: n.z, p: newPower});
-                            if(type === TYPES.DUST_OFF) grid[n.y][n.x][z] = TYPES.DUST_ON;
-                            if(type === TYPES.LAMP_OFF) grid[n.y][n.x][z] = TYPES.LAMP_ON;
+                            // AQUÍ ESTABA EL FALLO CRÍTICO: FALTABA LA 'n.' EN LA 'Z'
+                            if(type === TYPES.DUST_OFF) grid[n.y][n.x][n.z] = TYPES.DUST_ON;
+                            if(type === TYPES.LAMP_OFF) grid[n.y][n.x][n.z] = TYPES.LAMP_ON;
                         }
                     }
                 }
@@ -357,7 +340,7 @@
         scene.add(light);
         scene.add(new THREE.AmbientLight(0x404040));
 
-        // --- CAJA DE SELECCIÓN ---
+        // CAJA DE SELECCIÓN
         const selectionBoxGeo = new THREE.BoxGeometry(1.005, 1.005, 1.005);
         const selectionBoxEdges = new THREE.EdgesGeometry(selectionBoxGeo);
         const selectionBoxLine = new THREE.LineSegments(selectionBoxEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
@@ -437,7 +420,7 @@
         document.addEventListener('wheel', (e) => { let curr = Array.from(slots).findIndex(s => s.classList.contains('active')); updateHotbar(e.deltaY > 0 ? (curr + 1) % 6 : (curr - 1 + 6) % 6); });
         window.addEventListener('keydown', (e) => { let num = parseInt(e.key); if(num >= 1 && num <= 6) updateHotbar(num - 1); });
 
-        // --- RAYCASTING CONTINUO ---
+        // --- RAYCASTING ---
         const raycaster = new THREE.Raycaster();
         raycaster.far = 8;
         const center = new THREE.Vector2(0, 0);
@@ -446,9 +429,9 @@
             if (!isLocked || !lookAtBlock) return;
             const {x: bx, y: by, z: bz} = lookAtBlock;
 
-            if (e.button === 0) { // Romper
+            if (e.button === 0) { 
                 if(getBlock(bx, by, bz) !== TYPES.AIR) { grid[by][bx][bz] = TYPES.AIR; needsRedstoneUpdate = true; buildMeshes(); }
-            } else if (e.button === 2) { // Colocar
+            } else if (e.button === 2) { 
                 const px = bx + lookAtNormal.x;
                 const py = by + lookAtNormal.y;
                 const pz = bz + lookAtNormal.z;
@@ -490,13 +473,13 @@
 
             if (needsRedstoneUpdate) { updateRedstone(); needsRedstoneUpdate = false; }
 
-            // Actualizar Raycast y Caja de Selección
             if (isLocked) {
                 raycaster.setFromCamera(center, camera);
                 const intersects = raycaster.intersectObjects(Object.values(meshes));
                 if (intersects.length > 0) {
                     const intersect = intersects[0];
-                    const pos = intersect.point.clone().add(intersect.face.normal.clone().multiplyScalar(-0.5));
+                    // Cálculo exacto para evitar errores en los bordes de los bloques
+                    const pos = intersect.point.clone().sub(intersect.face.normal.clone().multiplyScalar(0.01));
                     lookAtBlock = { x: Math.floor(pos.x), y: Math.floor(pos.y), z: Math.floor(pos.z) };
                     lookAtNormal = intersect.face.normal;
                     selectionBoxLine.position.set(lookAtBlock.x + 0.5, lookAtBlock.y + 0.5, lookAtBlock.z + 0.5);
