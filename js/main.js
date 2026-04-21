@@ -3,7 +3,7 @@ import { Player } from './player.js';
 import * as World from './world.js';
 import { createStoneTexture } from './textures/piedra.js';
 import { createRedstoneBlockTexture } from './textures/redstone.js';
-import { createDustOffTexture } from './textures/polvo_redstone.js';
+import { createDustOffTexture } from './textures/polvo_redstone.js'; // Solo para el icono de la barra
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
@@ -67,10 +67,19 @@ document.addEventListener('mousedown', (e) => {
         const point = intersect.point.clone();
         const normal = intersect.face.normal;
 
-        const blockPos = point.clone().sub(normal.clone().multiplyScalar(0.01));
-        const bx = Math.floor(blockPos.x);
-        const by = Math.floor(blockPos.y);
-        const bz = Math.floor(blockPos.z);
+        // Calcular qué bloque estamos mirando
+        // Para los Sprites (polvo) no hay "cara", así que usamos su posición directa
+        let bx, by, bz;
+        if (intersect.object.isSprite) {
+            bx = Math.floor(intersect.object.position.x);
+            by = Math.floor(intersect.object.position.y);
+            bz = Math.floor(intersect.object.position.z);
+        } else {
+            const blockPos = point.clone().sub(normal.clone().multiplyScalar(0.01));
+            bx = Math.floor(blockPos.x);
+            by = Math.floor(blockPos.y);
+            bz = Math.floor(blockPos.z);
+        }
 
         if (e.button === 0) { 
             const targetBlock = World.getBlock(bx, by, bz);
@@ -78,8 +87,6 @@ document.addEventListener('mousedown', (e) => {
                 World.setBlock(bx, by, bz, World.BLOCKS.AIR);
             }
         } else if (e.button === 2) { 
-            // EL FIX ESTÁ AQUÍ: 0.5 en lugar de 0.01
-            // Esto empuja el punto al centro de la casilla superior
             const placePos = point.clone().add(normal.clone().multiplyScalar(0.5));
             const px = Math.floor(placePos.x);
             const py = Math.floor(placePos.y);
@@ -111,8 +118,14 @@ function animate() {
             if (hitMesh.userData.blockType === World.BLOCKS.GRASS) {
                 selBox.visible = false;
             } else {
-                const p = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.01));
-                selBox.position.set(Math.floor(p.x) + 0.5, Math.floor(p.y) + 0.5, Math.floor(p.z) + 0.5);
+                let px, py, pz;
+                if (hitMesh.isSprite) {
+                    px = hitMesh.position.x; py = hitMesh.position.y; pz = hitMesh.position.z;
+                } else {
+                    const p = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.01));
+                    px = Math.floor(p.x) + 0.5; py = Math.floor(p.y) + 0.5; pz = Math.floor(p.z) + 0.5;
+                }
+                selBox.position.set(px, py, pz);
                 selBox.visible = true;
             }
         } else {
