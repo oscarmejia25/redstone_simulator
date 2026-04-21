@@ -6,16 +6,13 @@ export class Player {
         this.uiElement = uiElement;
         this.canvas = canvasElement;
         
-        this.SPEED = 15; // Velocidad de movimiento libre (muy rápida para construir)
+        this.SPEED = 15;
+        this.isPaused = false; // Control de pausa global
+        this.isLocked = false; // Control de ratón en PC
         
-        // Estado de teclas (compartido entre teclado y botones del celular)
         this.keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
-        
-        // Rotación
         this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
-        this.isLocked = false; // Para el mouse en PC
 
-        // Empezar un poco arriba para ver el suelo
         this.camera.position.set(50, 10, 50);
 
         this.initPCControls();
@@ -23,10 +20,9 @@ export class Player {
         this.initMobileLook();
     }
 
-    // --- CONTROLES PC (Teclado y Mouse) ---
     initPCControls() {
         document.addEventListener('mousemove', (e) => {
-            if (!this.isLocked) return;
+            if (!this.isLocked || this.isPaused) return;
             this.euler.setFromQuaternion(this.camera.quaternion);
             this.euler.y -= e.movementX * 0.002;
             this.euler.x -= e.movementY * 0.002;
@@ -48,14 +44,18 @@ export class Player {
             if (e.code === 'Space') this.keys.space = false;
         });
 
-        this.uiElement.addEventListener('click', () => this.canvas.requestPointerLock());
+        this.uiElement.addEventListener('click', () => {
+            this.isPaused = false;
+            this.canvas.requestPointerLock();
+        });
+
         document.addEventListener('pointerlockchange', () => {
             this.isLocked = document.pointerLockElement === this.canvas;
+            if (!this.isLocked) this.isPaused = true; // ESC pausa el juego
             this.uiElement.style.display = this.isLocked ? 'none' : 'flex';
         });
     }
 
-    // --- CONTROLES MÓVIL (Botones en pantalla) ---
     initMobileButtons() {
         const mapBtnToKey = {
             'btn-w': 'w', 'btn-a': 'a', 'btn-s': 's', 'btn-d': 'd',
@@ -66,27 +66,23 @@ export class Player {
             const btn = document.getElementById(id);
             if (!btn) return;
 
-            // Usamos pointerdown/pointerup porque funciona igual para dedo y ratón
-            btn.addEventListener('pointerdown', (e) => {
-                e.preventDefault(); // Evita scroll del celular
-                this.keys[key] = true;
-            });
-            
-            // Si el dedo sale del botón mientras presiona, que también se suelte
-            btn.addEventListener('pointerup', () => this.keys[key] = false);
-            btn.addEventListener('pointerleave', () => this.keys[key] = false);
-            btn.addEventListener('pointercancel', () => this.keys[key] = false);
+            const start = (e) => { e.stopPropagation(); this.keys[key] = true; };
+            const end = () => this.keys[key] = false;
+
+            btn.addEventListener('pointerdown', start);
+            btn.addEventListener('pointerup', end);
+            btn.addEventListener('pointerleave', end);
+            btn.addEventListener('pointercancel', end);
         });
     }
 
-    // --- CONTROLES MÓVIL (Arrastrar para mirar) ---
     initMobileLook() {
         let isTouching = false;
         let lastX = 0, lastY = 0;
 
         this.canvas.addEventListener('pointerdown', (e) => {
-            // Solo rotar si NO está tocando un botón (clase 'no-look' en el HTML)
-            if (!e.target.closest('.no-look')) {
+            // Solo rotar si NO toca un botón (los botones tienen stopPropagation)
+            if (!this.isPaused) {
                 isTouching = true;
                 lastX = e.clientX;
                 lastY = e.clientY;
@@ -94,12 +90,12 @@ export class Player {
         });
 
         window.addEventListener('pointermove', (e) => {
-            if (!isTouching) return;
+            if (!isTouching || this.isPaused) return;
             const deltaX = e.clientX - lastX;
             const deltaY = e.clientY - lastY;
 
             this.euler.setFromQuaternion(this.camera.quaternion);
-            this.euler.y -= deltaX * 0.005; // Un poco más sensible que el ratón
+            this.euler.y -= deltaX * 0.005;
             this.euler.x -= deltaY * 0.005;
             this.euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.euler.x));
             this.camera.quaternion.setFromEuler(this.euler);
@@ -108,17 +104,42 @@ export class Player {
             lastY = e.clientY;
         });
 
-        window.addEventListener('pointerup', () => isTouching = false);
-        window.addEventListener('pointercancel', () => isTouching = false);
+        const stopTouch = () => isTouching = false;
+        window.addEventListener('pointerup', stopTouch);
+        window.addEventListener('pointercancel', stopTouch);
     }
 
-    // --- BUCLE DE ACTUALIZACIÓN ---
     update(delta) {
-        // EJES ABSOLUTOS (Sin importar hacia dónde mires)
-        if (this.keys.a) this.camera.position.x -= this.SPEED * delta;
-        if (this.keys.d) this.camera.position.x += this.SPEED * delta;
-        if (this.keys.w) this.camera.position.z -= this.SPEED * delta;
-        if (this.keys.s) this.camera.position.z += this.SPEED * delta;
+        if (this.isPaused) return; // Si está en pausa, no hacer nada
+
+        // 1. MOVIMIENTO HORIZONTAL BASADO EN LA VISTA
+        // Extraer el ángulo de rotación horizontal (Yaw) de la cámara
+        const yaw = this.euler.y; 
+        
+        // Calcular los vectores forward (W/S) y right (A/D) usando trigonometría pura
+        const forwardX = -Math.sin(yaw);
+        const forwardZ = -Math.cos(yaw);
+        const rightX = Math.cos(yaw);
+        const rightZ = -Math.sin(yaw);
+
+        let moveX = 0, moveZ = 0;
+
+        if (this.keys.w) { moveX += forwardX; moveZ += forwardZ; }
+        if (this.keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
+        if (this.keys.d) { moveX += rightX; moveZ += rightZ; }
+        if (this.keys.a) { moveX -= rightX; moveZ -= rightZ; }
+
+        // Normalizar para evitar ir más rápido en diagonal
+        if (moveX !== 0 || moveZ !== 0) {
+            const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
+            moveX /= length;
+            moveZ /= length;
+        }
+
+        this.camera.position.x += moveX * this.SPEED * delta;
+        this.camera.position.z += moveZ * this.SPEED * delta;
+
+        // 2. MOVIMIENTO VERTICAL ESTRICTO
         if (this.keys.space) this.camera.position.y += this.SPEED * delta;
         if (this.keys.shift) this.camera.position.y -= this.SPEED * delta;
     }

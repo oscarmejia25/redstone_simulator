@@ -2,23 +2,25 @@
 body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; }
 
 #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
-#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-shadow: 1px 1px 2px black; }
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-shadow: 1px 1px 2px black; z-index: 5; }
 
-#instructions { color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; z-index: 10; }
+/* --- MENÚS --- */
+#instructions { color: white; background: rgba(0,0,0,0.8); padding: 30px; border-radius: 15px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; z-index: 20; }
 #instructions h1 { margin-top: 0; color: #ff5555; }
 
-#hotbar { display: flex; gap: 5px; margin-bottom: 10px; z-index: 10; }
+#mobile-pause-menu { display: none; color: white; background: rgba(0,0,0,0.8); padding: 40px; border-radius: 15px; text-align: center; z-index: 20; flex-direction: column; align-items: center; gap: 20px; }
+#mobile-pause-menu h1 { margin: 0; color: #ff5555; }
+#btn-resume-mobile { padding: 15px 30px; font-size: 20px; background: #555; color: white; border: 2px solid #fff; border-radius: 10px; pointer-events: auto; cursor: pointer; }
+
+/* --- HOTBAR --- */
+#hotbar { display: flex; gap: 5px; margin-bottom: 15px; z-index: 10; }
 .slot { width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 2px solid #555; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; position: relative; }
 .slot.active { border-color: #fff; background: rgba(255,255,255,0.2); }
 .slot img { width: 40px; height: 40px; image-rendering: pixelated; }
 .slot span { position: absolute; bottom: 2px; right: 5px; font-size: 10px; }
 
-/* ESTILOS CONTROLES MÓVILES */
-#mobile-controls { 
-    position: absolute; bottom: 80px; left: 0; width: 100%; 
-    display: flex; justify-content: space-between; 
-    padding: 0 20px; box-sizing: border-box; pointer-events: auto;
-}
+/* --- CONTROLES MÓVILES --- */
+#mobile-controls { position: absolute; bottom: 80px; left: 0; width: 100%; display: none; justify-content: space-between; padding: 0 20px; box-sizing: border-box; pointer-events: auto; }
 
 #move-pad { display: grid; grid-template-columns: 50px 50px 50px; grid-template-rows: 50px 50px 50px; gap: 5px; }
 #btn-w { grid-column: 2; grid-row: 1; }
@@ -26,15 +28,18 @@ body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans
 #btn-s { grid-column: 2; grid-row: 3; }
 #btn-d { grid-column: 3; grid-row: 2; }
 
-#height-pad { display: flex; flex-direction: column; gap: 10px; }
+#right-mobile-pad { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 
-.ctrl-btn { 
-    width: 50px; height: 50px; 
-    background: rgba(255, 255, 255, 0.3); 
-    border: 2px solid rgba(255, 255, 255, 0.5); 
-    border-radius: 10px; color: white; font-size: 20px; font-weight: bold;
-    display: flex; align-items: center; justify-content: center;
-}
-
-/* Cuando se mantiene presionado */
+.ctrl-btn { width: 50px; height: 50px; background: rgba(255, 255, 255, 0.3); border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 10px; color: white; font-size: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
 .ctrl-btn:active { background: rgba(255, 255, 255, 0.6); }
+
+/* MAGIA: Si la pantalla tiene hover (ratón) y es precisa, ocultar cosas de móvil */
+@media (hover: hover) and (pointer: fine) {
+    #mobile-controls, #mobile-pause-menu, #btn-pause { display: none !important; }
+}
+/* Si NO tiene hover (táctil), mostrar cosas de móvil y ocultar menú de PC */
+@media (hover: none) and (pointer: coarse) {
+    #mobile-controls { display: flex !important; }
+    #instructions { display: none !important; }
+    #crosshair { display: none !important; }
+}

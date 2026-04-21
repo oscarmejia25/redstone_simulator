@@ -10,7 +10,6 @@ scene.fog = new THREE.Fog(0x87CEEB, 80, 130);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
-// Prevenir zoom del celular
 renderer.domElement.style.touchAction = 'none'; 
 document.body.appendChild(renderer.domElement);
 
@@ -20,8 +19,29 @@ sunLight.position.set(50, 100, 50);
 scene.add(sunLight);
 
 World.initWorld(scene);
-// Ya no le pasamos el getBlock
 const player = new Player(camera, document.getElementById('instructions'), renderer.domElement);
+
+// Referencia al menú de pausa móvil
+const mobilePauseMenu = document.getElementById('mobile-pause-menu');
+const btnResumeMobile = document.getElementById('btn-resume-mobile');
+const btnPauseMobile = document.getElementById('btn-pause');
+
+// --- LÓGICA DE PAUSA MÓVIL ---
+if (btnPauseMobile) {
+    btnPauseMobile.addEventListener('pointerdown', (e) => {
+        e.stopPropagation(); // Evita que gire la cámara al pausar
+        player.isPaused = true;
+        mobilePauseMenu.style.display = 'flex';
+    });
+}
+
+if (btnResumeMobile) {
+    btnResumeMobile.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        player.isPaused = false;
+        mobilePauseMenu.style.display = 'none';
+    });
+}
 
 // Icono de la barra
 const slots = document.querySelectorAll('.slot[data-block]');
@@ -34,11 +54,11 @@ slots.forEach(slot => {
 let selectedBlockType = World.BLOCKS.STONE;
 
 const raycaster = new THREE.Raycaster();
-raycaster.far = 40; // Aumenté un poco el alcance ya que ahora vuelas rápido
+raycaster.far = 40;
 const center = new THREE.Vector2(0, 0);
 
 document.addEventListener('mousedown', (e) => {
-    if (!player.isLocked) return;
+    if (!player.isLocked || player.isPaused) return;
 
     raycaster.setFromCamera(center, camera);
     const intersects = raycaster.intersectObjects(World.getMeshes());
@@ -65,7 +85,6 @@ document.addEventListener('mousedown', (e) => {
             const pz = Math.floor(placePos.z);
 
             if (World.getBlock(px, py, pz) === World.BLOCKS.AIR) {
-                // Ya no hay colisiones de jugador, así que quitamos la comprobación de la caja del cuerpo
                 World.setBlock(px, py, pz, selectedBlockType);
             }
         }
@@ -80,24 +99,29 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = Math.min(clock.getDelta(), 0.1);
     
+    // Actualizar jugador (si no está en pausa, no se moverá gracias a su checks interno)
     player.update(delta);
 
-    // Actualizar caja de selección (funciona igual en PC y móvil)
-    raycaster.setFromCamera(center, camera);
-    const intersects = raycaster.intersectObjects(World.getMeshes());
-    const selBox = World.getSelectionBox();
-    
-    if (intersects.length > 0) {
-        const hitMesh = intersects[0].object;
-        if (hitMesh.userData.blockType === World.BLOCKS.GRASS) {
-            selBox.visible = false;
+    // Actualizar caja de selección (Solo si no está en pausa)
+    if (!player.isPaused) {
+        raycaster.setFromCamera(center, camera);
+        const intersects = raycaster.intersectObjects(World.getMeshes());
+        const selBox = World.getSelectionBox();
+        
+        if (intersects.length > 0) {
+            const hitMesh = intersects[0].object;
+            if (hitMesh.userData.blockType === World.BLOCKS.GRASS) {
+                selBox.visible = false;
+            } else {
+                const p = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.01));
+                selBox.position.set(Math.floor(p.x) + 0.5, Math.floor(p.y) + 0.5, Math.floor(p.z) + 0.5);
+                selBox.visible = true;
+            }
         } else {
-            const p = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.01));
-            selBox.position.set(Math.floor(p.x) + 0.5, Math.floor(p.y) + 0.5, Math.floor(p.z) + 0.5);
-            selBox.visible = true;
+            selBox.visible = false;
         }
     } else {
-        selBox.visible = false;
+        World.getSelectionBox().visible = false;
     }
 
     renderer.render(scene, camera);
