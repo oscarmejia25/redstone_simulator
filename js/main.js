@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { Player } from './player.js';
 import * as World from './world.js';
 import { createStoneTexture } from './textures/piedra.js';
-import { createRedstoneBlockTexture } from './textures/redstone.js'; // <-- NUEVA IMPORTACIÓN
+import { createRedstoneBlockTexture } from './textures/redstone.js';
+import { createDustOffTexture } from './textures/polvo_redstone.js'; // <-- NUEVA
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
@@ -23,34 +24,34 @@ World.initWorld(scene);
 const player = new Player(camera, document.getElementById('instructions'), renderer.domElement);
 
 const mobilePauseMenu = document.getElementById('mobile-pause-menu');
-const btnResumeMobile = document.getElementById('btn-resume-mobile');
-const btnPauseMobile = document.getElementById('btn-pause');
+if (document.getElementById('btn-pause')) document.getElementById('btn-pause').addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = true; mobilePauseMenu.style.display = 'flex'; });
+if (document.getElementById('btn-resume-mobile')) document.getElementById('btn-resume-mobile').addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = false; mobilePauseMenu.style.display = 'none'; });
 
-if (btnPauseMobile) btnPauseMobile.addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = true; mobilePauseMenu.style.display = 'flex'; });
-if (btnResumeMobile) btnResumeMobile.addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = false; mobilePauseMenu.style.display = 'none'; });
-
-// --- ICONOS DE LA BARRA ---
+// --- ICONOS Y SELECCIÓN ---
 const slots = document.querySelectorAll('.slot[data-block]');
 slots.forEach(slot => {
     const id = slot.getAttribute('data-block');
     if (id === "1") slot.querySelector('img').src = createStoneTexture().image.toDataURL();
-    if (id === "2") slot.querySelector('img').src = createRedstoneBlockTexture().image.toDataURL(); // Icono Rojo
+    if (id === "2") slot.querySelector('img').src = createRedstoneBlockTexture().image.toDataURL();
+    if (id === "3") slot.querySelector('img').src = createDustOffTexture().image.toDataURL(); // Icono Polvo
 });
 
 let selectedBlockType = World.BLOCKS.STONE;
 
-// --- SELECCIÓN DE BARRA (Tecla 1 y 2) ---
-window.addEventListener('keydown', (e) => {
-    if(e.key === '1') { selectedBlockType = World.BLOCKS.STONE; updateHotbar(0); }
-    if(e.key === '2') { selectedBlockType = World.BLOCKS.REDSTONE_BLOCK; updateHotbar(1); }
-});
-
 function updateHotbar(index) {
     slots.forEach(s => s.classList.remove('active'));
     if (slots[index]) slots[index].classList.add('active');
+    const types = [World.BLOCKS.STONE, World.BLOCKS.REDSTONE_BLOCK, World.BLOCKS.REDSTONE_DUST_OFF];
+    if (types[index] !== undefined) selectedBlockType = types[index];
 }
 
-// --- RAYCASTING (Poner y Quitar) ---
+window.addEventListener('keydown', (e) => {
+    if(e.key === '1') updateHotbar(0);
+    if(e.key === '2') updateHotbar(1);
+    if(e.key === '3') updateHotbar(2);
+});
+
+// --- RAYCASTING ---
 const raycaster = new THREE.Raycaster();
 raycaster.far = 40;
 const center = new THREE.Vector2(0, 0);
@@ -73,7 +74,6 @@ document.addEventListener('mousedown', (e) => {
 
         if (e.button === 0) { 
             const targetBlock = World.getBlock(bx, by, bz);
-            // Puedes destruir piedra y bloque de redstone (pero no el pasto)
             if (targetBlock !== World.BLOCKS.AIR && targetBlock !== World.BLOCKS.GRASS) {
                 World.setBlock(bx, by, bz, World.BLOCKS.AIR);
             }
@@ -84,7 +84,7 @@ document.addEventListener('mousedown', (e) => {
             const pz = Math.floor(placePos.z);
 
             if (World.getBlock(px, py, pz) === World.BLOCKS.AIR) {
-                World.setBlock(px, py, pz, selectedBlockType);
+                World.setBlock(px, py, pz, selectedBlockType); // setBlock ahora verifica si es polvo
             }
         }
     }
@@ -97,7 +97,6 @@ const clock = new THREE.Clock();
 function animate() {
     requestAnimationFrame(animate);
     const delta = Math.min(clock.getDelta(), 0.1);
-    
     player.update(delta);
 
     if (!player.isPaused) {
