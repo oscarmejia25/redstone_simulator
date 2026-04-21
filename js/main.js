@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Player } from './player.js';
 import * as World from './world.js';
 import { createStoneTexture } from './textures/piedra.js';
+import { createRedstoneBlockTexture } from './textures/redstone.js'; // <-- NUEVA IMPORTACIÓN
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
@@ -21,38 +22,35 @@ scene.add(sunLight);
 World.initWorld(scene);
 const player = new Player(camera, document.getElementById('instructions'), renderer.domElement);
 
-// Referencia al menú de pausa móvil
 const mobilePauseMenu = document.getElementById('mobile-pause-menu');
 const btnResumeMobile = document.getElementById('btn-resume-mobile');
 const btnPauseMobile = document.getElementById('btn-pause');
 
-// --- LÓGICA DE PAUSA MÓVIL ---
-if (btnPauseMobile) {
-    btnPauseMobile.addEventListener('pointerdown', (e) => {
-        e.stopPropagation(); // Evita que gire la cámara al pausar
-        player.isPaused = true;
-        mobilePauseMenu.style.display = 'flex';
-    });
-}
+if (btnPauseMobile) btnPauseMobile.addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = true; mobilePauseMenu.style.display = 'flex'; });
+if (btnResumeMobile) btnResumeMobile.addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = false; mobilePauseMenu.style.display = 'none'; });
 
-if (btnResumeMobile) {
-    btnResumeMobile.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        player.isPaused = false;
-        mobilePauseMenu.style.display = 'none';
-    });
-}
-
-// Icono de la barra
+// --- ICONOS DE LA BARRA ---
 const slots = document.querySelectorAll('.slot[data-block]');
 slots.forEach(slot => {
-    if(slot.getAttribute('data-block') === "1") {
-        slot.querySelector('img').src = createStoneTexture().image.toDataURL();
-    }
+    const id = slot.getAttribute('data-block');
+    if (id === "1") slot.querySelector('img').src = createStoneTexture().image.toDataURL();
+    if (id === "2") slot.querySelector('img').src = createRedstoneBlockTexture().image.toDataURL(); // Icono Rojo
 });
 
 let selectedBlockType = World.BLOCKS.STONE;
 
+// --- SELECCIÓN DE BARRA (Tecla 1 y 2) ---
+window.addEventListener('keydown', (e) => {
+    if(e.key === '1') { selectedBlockType = World.BLOCKS.STONE; updateHotbar(0); }
+    if(e.key === '2') { selectedBlockType = World.BLOCKS.REDSTONE_BLOCK; updateHotbar(1); }
+});
+
+function updateHotbar(index) {
+    slots.forEach(s => s.classList.remove('active'));
+    if (slots[index]) slots[index].classList.add('active');
+}
+
+// --- RAYCASTING (Poner y Quitar) ---
 const raycaster = new THREE.Raycaster();
 raycaster.far = 40;
 const center = new THREE.Vector2(0, 0);
@@ -75,6 +73,7 @@ document.addEventListener('mousedown', (e) => {
 
         if (e.button === 0) { 
             const targetBlock = World.getBlock(bx, by, bz);
+            // Puedes destruir piedra y bloque de redstone (pero no el pasto)
             if (targetBlock !== World.BLOCKS.AIR && targetBlock !== World.BLOCKS.GRASS) {
                 World.setBlock(bx, by, bz, World.BLOCKS.AIR);
             }
@@ -99,10 +98,8 @@ function animate() {
     requestAnimationFrame(animate);
     const delta = Math.min(clock.getDelta(), 0.1);
     
-    // Actualizar jugador (si no está en pausa, no se moverá gracias a su checks interno)
     player.update(delta);
 
-    // Actualizar caja de selección (Solo si no está en pausa)
     if (!player.isPaused) {
         raycaster.setFromCamera(center, camera);
         const intersects = raycaster.intersectObjects(World.getMeshes());

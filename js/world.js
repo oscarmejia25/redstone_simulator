@@ -1,16 +1,25 @@
 import * as THREE from 'three';
 import { createGrassMaterials } from './textures/pasto.js';
 import { createStoneTexture } from './textures/piedra.js';
+import { createRedstoneBlockTexture } from './textures/redstone.js';
 
-export const BLOCKS = { AIR: 0, GRASS: 1, STONE: 2 };
+export const BLOCKS = { AIR: 0, GRASS: 1, STONE: 2, REDSTONE_BLOCK: 3 };
 
 const WORLD_SIZE_X = 100;
 const WORLD_SIZE_Y = 50; 
 const WORLD_SIZE_Z = 100;
 
+// Matriz de bloques físicos
 const grid = new Array(WORLD_SIZE_Y).fill(null).map(() => 
     new Array(WORLD_SIZE_X).fill(null).map(() => 
         new Array(WORLD_SIZE_Z).fill(BLOCKS.AIR)
+    )
+);
+
+// MATRIZ DE ENERGÍA (Guarda un número del 0 al 15)
+export const powerGrid = new Array(WORLD_SIZE_Y).fill(null).map(() => 
+    new Array(WORLD_SIZE_X).fill(null).map(() => 
+        new Array(WORLD_SIZE_Z).fill(0)
     )
 );
 
@@ -45,7 +54,20 @@ export function getBlock(x, y, z) {
 export function setBlock(x, y, z, type) {
     if (x < 0 || x >= WORLD_SIZE_X || y < 0 || y >= WORLD_SIZE_Y || z < 0 || z >= WORLD_SIZE_Z) return;
     grid[y][x][z] = type;
+    
+    // LÓGICA DE ENERGÍA
+    if (type === BLOCKS.REDSTONE_BLOCK) {
+        powerGrid[y][x][z] = 15; // El bloque sólido SIEMPRE es fuente de 15
+    } else {
+        powerGrid[y][x][z] = 0;  // Si quitas el bloque o pones otra cosa, la energía desaparece
+    }
+    
     buildMeshes();
+}
+
+export function getPower(x, y, z) {
+    if (x < 0 || x >= WORLD_SIZE_X || y < 0 || y >= WORLD_SIZE_Y || z < 0 || z >= WORLD_SIZE_Z) return 0;
+    return powerGrid[y][x][z];
 }
 
 export function getMeshes() { return Object.values(meshes); }
@@ -55,7 +77,6 @@ function buildMeshes() {
     for (let key in meshes) {
         scene.remove(meshes[key]);
         meshes[key].dispose();
-        // ---> LA LÍNEA MÁGICA QUE DESTRUYE EL FANTAMA <---
         delete meshes[key]; 
     }
 
@@ -86,7 +107,9 @@ function buildMeshes() {
     const dummy = new THREE.Object3D();
     const materials = {
         [BLOCKS.GRASS]: createGrassMaterials(),
-        [BLOCKS.STONE]: new THREE.MeshLambertMaterial({ map: createStoneTexture() })
+        [BLOCKS.STONE]: new THREE.MeshLambertMaterial({ map: createStoneTexture() }),
+        // MeshBasicMaterial hace que brille por sí mismo sin necesidad de luz (ideal para la fuente de energía)
+        [BLOCKS.REDSTONE_BLOCK]: new THREE.MeshBasicMaterial({ map: createRedstoneBlockTexture() }) 
     };
 
     for (let type in counts) {
@@ -98,10 +121,7 @@ function buildMeshes() {
             mesh.setMatrixAt(i, dummy.matrix);
         }
         mesh.instanceMatrix.needsUpdate = true;
-        
-        // Etiquetamos la malla para que el ratón sepa qué es
         mesh.userData.blockType = parseInt(type);
-        
         scene.add(mesh);
         meshes[type] = mesh;
     }

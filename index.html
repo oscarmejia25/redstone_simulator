@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Redstone Sandbox</title>
+    
+    <!-- Importaciones de Three.js -->
     <script type="importmap">
         {
             "imports": {
@@ -12,42 +14,51 @@
             }
         }
     </script>
+    
+    <!-- Estilos -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     
     <div id="ui">
+        <!-- Mira central -->
         <div id="crosshair">+</div>
         
-        <!-- MENÚ PC -->
+        <!-- Menú de Inicio PC -->
         <div id="instructions">
             <h1>Redstone Sandbox</h1>
             <p>Haz clic para jugar<br>ESC para pausar</p>
         </div>
 
-        <!-- MENÚ MÓVIL (Oculto en PC) -->
+        <!-- Menú de Pausa Móvil -->
         <div id="mobile-pause-menu">
             <h1>PAUSA</h1>
             <button id="btn-resume-mobile">REANUDAR</button>
         </div>
 
+        <!-- Barra de Objetos -->
         <div id="hotbar">
+            <!-- Slot 1: Piedra -->
             <div class="slot active" data-block="1"><img src="" alt="Piedra"><span>1</span></div>
-            <div class="slot"></div>
+            <!-- Slot 2: Bloque de Redstone -->
+            <div class="slot" data-block="2"><img src="" alt="Redstone"><span>2</span></div>
+            <!-- Slots vacíos de relleno -->
             <div class="slot"></div>
             <div class="slot"></div>
             <div class="slot"></div>
             <div class="slot"></div>
         </div>
 
-        <!-- CONTROLES MÓVILES (Ocultos en PC) -->
+        <!-- Controles Táctiles (Solo visibles en celular) -->
         <div id="mobile-controls">
+            <!-- Cruceta de movimiento -->
             <div id="move-pad">
                 <button id="btn-w" class="ctrl-btn">W</button>
                 <button id="btn-a" class="ctrl-btn">A</button>
                 <button id="btn-s" class="ctrl-btn">S</button>
                 <button id="btn-d" class="ctrl-btn">D</button>
             </div>
+            <!-- Botones de acción -->
             <div id="right-mobile-pad">
                 <button id="btn-pause" class="ctrl-btn">❚❚</button>
                 <button id="btn-space" class="ctrl-btn">▲</button>
@@ -56,6 +67,7 @@
         </div>
     </div>
 
+    <!-- Archivo principal de JavaScript -->
     <script type="module" src="./js/main.js"></script>
 </body>
 </html>
