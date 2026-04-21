@@ -10,6 +10,8 @@ scene.fog = new THREE.Fog(0x87CEEB, 80, 130);
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
+// Prevenir zoom del celular
+renderer.domElement.style.touchAction = 'none'; 
 document.body.appendChild(renderer.domElement);
 
 scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -18,7 +20,8 @@ sunLight.position.set(50, 100, 50);
 scene.add(sunLight);
 
 World.initWorld(scene);
-const player = new Player(camera, document.getElementById('instructions'), renderer.domElement, World.getBlock);
+// Ya no le pasamos el getBlock
+const player = new Player(camera, document.getElementById('instructions'), renderer.domElement);
 
 // Icono de la barra
 const slots = document.querySelectorAll('.slot[data-block]');
@@ -31,7 +34,7 @@ slots.forEach(slot => {
 let selectedBlockType = World.BLOCKS.STONE;
 
 const raycaster = new THREE.Raycaster();
-raycaster.far = 8;
+raycaster.far = 40; // Aumenté un poco el alcance ya que ahora vuelas rápido
 const center = new THREE.Vector2(0, 0);
 
 document.addEventListener('mousedown', (e) => {
@@ -52,8 +55,6 @@ document.addEventListener('mousedown', (e) => {
 
         if (e.button === 0) { 
             const targetBlock = World.getBlock(bx, by, bz);
-            
-            // Romper si no es pasto
             if (targetBlock !== World.BLOCKS.AIR && targetBlock !== World.BLOCKS.GRASS) {
                 World.setBlock(bx, by, bz, World.BLOCKS.AIR);
             }
@@ -64,13 +65,8 @@ document.addEventListener('mousedown', (e) => {
             const pz = Math.floor(placePos.z);
 
             if (World.getBlock(px, py, pz) === World.BLOCKS.AIR) {
-                const pMinX = camera.position.x - 0.3, pMaxX = camera.position.x + 0.3;
-                const pMinY = camera.position.y - 1.6, pMaxY = camera.position.y + 0.2;
-                const pMinZ = camera.position.z - 0.3, pMaxZ = camera.position.z + 0.3;
-
-                if (!(px + 1 > pMinX && px < pMaxX && py + 1 > pMinY && py < pMaxY && pz + 1 > pMinZ && pz < pMaxZ)) {
-                    World.setBlock(px, py, pz, selectedBlockType);
-                }
+                // Ya no hay colisiones de jugador, así que quitamos la comprobación de la caja del cuerpo
+                World.setBlock(px, py, pz, selectedBlockType);
             }
         }
     }
@@ -86,27 +82,22 @@ function animate() {
     
     player.update(delta);
 
-    if (player.isLocked) {
-        raycaster.setFromCamera(center, camera);
-        const intersects = raycaster.intersectObjects(World.getMeshes());
-        
-        const selBox = World.getSelectionBox();
-        if (intersects.length > 0) {
-            const hitMesh = intersects[0].object;
-            
-            // Si apuntas al pasto, ocultar la caja. Si apuntas a piedra, mostrarla.
-            if (hitMesh.userData.blockType === World.BLOCKS.GRASS) {
-                selBox.visible = false;
-            } else {
-                const p = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.01));
-                selBox.position.set(Math.floor(p.x) + 0.5, Math.floor(p.y) + 0.5, Math.floor(p.z) + 0.5);
-                selBox.visible = true;
-            }
-        } else {
+    // Actualizar caja de selección (funciona igual en PC y móvil)
+    raycaster.setFromCamera(center, camera);
+    const intersects = raycaster.intersectObjects(World.getMeshes());
+    const selBox = World.getSelectionBox();
+    
+    if (intersects.length > 0) {
+        const hitMesh = intersects[0].object;
+        if (hitMesh.userData.blockType === World.BLOCKS.GRASS) {
             selBox.visible = false;
+        } else {
+            const p = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.01));
+            selBox.position.set(Math.floor(p.x) + 0.5, Math.floor(p.y) + 0.5, Math.floor(p.z) + 0.5);
+            selBox.visible = true;
         }
     } else {
-        World.getSelectionBox().visible = false;
+        selBox.visible = false;
     }
 
     renderer.render(scene, camera);

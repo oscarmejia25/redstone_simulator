@@ -1,40 +1,30 @@
 import * as THREE from 'three';
 
 export class Player {
-    constructor(camera, uiElement, canvasElement, getBlockFn) {
+    constructor(camera, uiElement, canvasElement) {
         this.camera = camera;
         this.uiElement = uiElement;
         this.canvas = canvasElement;
-        this.getBlock = getBlockFn; // <-- RECIBE LA FUNCIÓN DEL MUNDO
         
-        // Dimensiones
-        this.EYE_HEIGHT = 1.6;
-        this.PLAYER_WIDTH = 0.3; // 0.3 a cada lado del centro (Total: 0.6, un poco menos de 1 bloque para no pegarse a las paredes)
-        this.HEAD_SPACE = 0.2;   // Espacio vacío arriba de los ojos
+        this.SPEED = 15; // Velocidad de movimiento libre (muy rápida para construir)
         
-        // Físicas
-        this.velocity = new THREE.Vector3();
-        this.GRAVITY = 25;
-        this.JUMP_FORCE = 9;
-        this.FLY_SPEED = 10;
-        this.WALK_SPEED = 6;
-        
-        // Estado
-        this.isLocked = false;
-        this.isFlying = false;
-        this.canJump = true; 
-        this.lastSpaceTime = 0;
-        
-        // Teclas
+        // Estado de teclas (compartido entre teclado y botones del celular)
         this.keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
+        
+        // Rotación
         this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
+        this.isLocked = false; // Para el mouse en PC
 
-        this.camera.position.set(50, this.EYE_HEIGHT + 1, 50); // Nace sobre el pasto (Y=0 del bloque + 1 del bloque + 1.6 ojos)
+        // Empezar un poco arriba para ver el suelo
+        this.camera.position.set(50, 10, 50);
 
-        this.initEvents();
+        this.initPCControls();
+        this.initMobileButtons();
+        this.initMobileLook();
     }
 
-    initEvents() {
+    // --- CONTROLES PC (Teclado y Mouse) ---
+    initPCControls() {
         document.addEventListener('mousemove', (e) => {
             if (!this.isLocked) return;
             this.euler.setFromQuaternion(this.camera.quaternion);
@@ -48,17 +38,7 @@ export class Player {
             const key = e.key.toLowerCase();
             if (key in this.keys) this.keys[key] = true;
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') this.keys.shift = true;
-
-            if (e.code === 'Space') {
-                const now = Date.now();
-                if (now - this.lastSpaceTime < 300) {
-                    this.isFlying = !this.isFlying;
-                    this.velocity.y = 0;
-                }
-                this.lastSpaceTime = now;
-                this.keys.space = true; 
-                e.preventDefault();
-            }
+            if (e.code === 'Space') { this.keys.space = true; e.preventDefault(); }
         });
 
         document.addEventListener('keyup', (e) => {
@@ -69,124 +49,77 @@ export class Player {
         });
 
         this.uiElement.addEventListener('click', () => this.canvas.requestPointerLock());
-
         document.addEventListener('pointerlockchange', () => {
             this.isLocked = document.pointerLockElement === this.canvas;
             this.uiElement.style.display = this.isLocked ? 'none' : 'flex';
         });
     }
 
-    // NUEVA FUNCIÓN: Comprueba si la caja invisible del jugador choca con algún bloque sólido
-    checkCollision(x, y, z) {
-        // Calcular los extremos de la caja del jugador (X, Z a los lados; Y desde los pies hasta la cabeza)
-        const minX = Math.floor(x - this.PLAYER_WIDTH);
-        const maxX = Math.floor(x + this.PLAYER_WIDTH);
-        const minY = Math.floor(y - this.EYE_HEIGHT);       // Pies
-        const maxY = Math.floor(y + this.HEAD_SPACE);       // Cabeza
-        const minZ = Math.floor(z - this.PLAYER_WIDTH);
-        const maxZ = Math.floor(z + this.PLAYER_WIDTH);
+    // --- CONTROLES MÓVIL (Botones en pantalla) ---
+    initMobileButtons() {
+        const mapBtnToKey = {
+            'btn-w': 'w', 'btn-a': 'a', 'btn-s': 's', 'btn-d': 'd',
+            'btn-space': 'space', 'btn-shift': 'shift'
+        };
 
-        // Revisar todos los bloques que ocupan ese espacio
-        for (let bx = minX; bx <= maxX; bx++) {
-            for (let by = minY; by <= maxY; by++) {
-                for (let bz = minZ; bz <= maxZ; bz++) {
-                    const block = this.getBlock(bx, by, bz);
-                    // 0 es AIRE. Si es cualquier otra cosa (Pasto 1, Piedra 2), hay colisión
-                    if (block !== 0) return true;
-                }
-            }
-        }
-        return false;
+        Object.entries(mapBtnToKey).forEach(([id, key]) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+
+            // Usamos pointerdown/pointerup porque funciona igual para dedo y ratón
+            btn.addEventListener('pointerdown', (e) => {
+                e.preventDefault(); // Evita scroll del celular
+                this.keys[key] = true;
+            });
+            
+            // Si el dedo sale del botón mientras presiona, que también se suelte
+            btn.addEventListener('pointerup', () => this.keys[key] = false);
+            btn.addEventListener('pointerleave', () => this.keys[key] = false);
+            btn.addEventListener('pointercancel', () => this.keys[key] = false);
+        });
     }
 
+    // --- CONTROLES MÓVIL (Arrastrar para mirar) ---
+    initMobileLook() {
+        let isTouching = false;
+        let lastX = 0, lastY = 0;
+
+        this.canvas.addEventListener('pointerdown', (e) => {
+            // Solo rotar si NO está tocando un botón (clase 'no-look' en el HTML)
+            if (!e.target.closest('.no-look')) {
+                isTouching = true;
+                lastX = e.clientX;
+                lastY = e.clientY;
+            }
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!isTouching) return;
+            const deltaX = e.clientX - lastX;
+            const deltaY = e.clientY - lastY;
+
+            this.euler.setFromQuaternion(this.camera.quaternion);
+            this.euler.y -= deltaX * 0.005; // Un poco más sensible que el ratón
+            this.euler.x -= deltaY * 0.005;
+            this.euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.euler.x));
+            this.camera.quaternion.setFromEuler(this.euler);
+
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+
+        window.addEventListener('pointerup', () => isTouching = false);
+        window.addEventListener('pointercancel', () => isTouching = false);
+    }
+
+    // --- BUCLE DE ACTUALIZACIÓN ---
     update(delta) {
-        if (!this.isLocked) return;
-
-        // 1. Dirección de la vista
-        const rawForward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
-        const rawRight = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
-        const forward = new THREE.Vector3(rawForward.x, 0, rawForward.z);
-        const right = new THREE.Vector3(rawRight.x, 0, rawRight.z);
-        if (forward.length() > 0.01) forward.normalize();
-        if (right.length() > 0.01) right.normalize();
-
-        // 2. Movimiento Horizontal
-        const speed = this.isFlying ? this.FLY_SPEED : this.WALK_SPEED;
-        this.velocity.x = 0; this.velocity.z = 0;
-        if (this.keys.w) { this.velocity.x += forward.x; this.velocity.z += forward.z; }
-        if (this.keys.s) { this.velocity.x -= forward.x; this.velocity.z -= forward.z; }
-        if (this.keys.d) { this.velocity.x += right.x; this.velocity.z += right.z; }
-        if (this.keys.a) { this.velocity.x -= right.x; this.velocity.z -= right.z; }
-        if (this.velocity.x !== 0 || this.velocity.z !== 0) this.velocity.normalize().multiplyScalar(speed);
-
-        // 3. Movimiento Vertical
-        if (this.isFlying) {
-            if (this.keys.space) this.velocity.y = this.FLY_SPEED;
-            else if (this.keys.shift) this.velocity.y = -this.FLY_SPEED;
-            else this.velocity.y = 0;
-        } else {
-            this.velocity.y -= this.GRAVITY * delta;
-            if (this.keys.space && this.canJump) {
-                this.velocity.y = this.JUMP_FORCE;
-                this.canJump = false;
-            }
-        }
-
-        // 4. APLICAR FÍSICAS Y COLISIONES SEPARADAS POR EJES (Permite deslizarse por las paredes)
-
-        // EJE X
-        let nextX = this.camera.position.x + this.velocity.x * delta;
-        // Limites del mundo (Muros invisibles)
-        if (nextX - this.PLAYER_WIDTH >= 0 && nextX + this.PLAYER_WIDTH <= 100) {
-            if (!this.checkCollision(nextX, this.camera.position.y, this.camera.position.z)) {
-                this.camera.position.x = nextX; // Si no choca, moverse
-            } else {
-                this.velocity.x = 0; // Si choca, frenar
-            }
-        } else { this.velocity.x = 0; }
-
-        // EJE Z
-        let nextZ = this.camera.position.z + this.velocity.z * delta;
-        if (nextZ - this.PLAYER_WIDTH >= 0 && nextZ + this.PLAYER_WIDTH <= 100) {
-            if (!this.checkCollision(this.camera.position.x, this.camera.position.y, nextZ)) {
-                this.camera.position.z = nextZ;
-            } else {
-                this.velocity.z = 0;
-            }
-        } else { this.velocity.z = 0; }
-
-        // EJE Y
-        let nextY = this.camera.position.y + this.velocity.y * delta;
-        if (nextY > 500) nextY = 500; // Techo de seguridad
-
-        if (this.isFlying) {
-            // Volando: Solo frenar si chocas con el suelo o techo
-            if (!this.checkCollision(this.camera.position.x, nextY, this.camera.position.z)) {
-                this.camera.position.y = nextY;
-            } else {
-                if (this.velocity.y < 0) this.camera.position.y = Math.floor(nextY - this.EYE_HEIGHT) + 1 + this.EYE_HEIGHT;
-                this.velocity.y = 0;
-            }
-        } else {
-            // Caminando: Gravedad y saltos
-            if (!this.checkCollision(this.camera.position.x, nextY, this.camera.position.z)) {
-                this.camera.position.y = nextY;
-                this.canJump = false; // Está en el aire
-            } else {
-                // CHOCÓ CONTRA ALGO EN Y
-                if (this.velocity.y < 0) {
-                    // Estaba cayendo: Aterrizar suavemente sobre el bloque
-                    // Calculamos exactamente la altura de la cara superior del bloque que nos frenó
-                    const feetY = nextY - this.EYE_HEIGHT;
-                    const topOfBlock = Math.floor(feetY) + 1;
-                    this.camera.position.y = topOfBlock + this.EYE_HEIGHT;
-                    this.canJump = true; // Toca suelo, puede saltar
-                } else if (this.velocity.y > 0) {
-                    // Estaba subiendo: Golpeó la cabeza con un bloque
-                    this.velocity.y = 0;
-                }
-                this.velocity.y = 0;
-            }
-        }
+        // EJES ABSOLUTOS (Sin importar hacia dónde mires)
+        if (this.keys.a) this.camera.position.x -= this.SPEED * delta;
+        if (this.keys.d) this.camera.position.x += this.SPEED * delta;
+        if (this.keys.w) this.camera.position.z -= this.SPEED * delta;
+        if (this.keys.s) this.camera.position.z += this.SPEED * delta;
+        if (this.keys.space) this.camera.position.y += this.SPEED * delta;
+        if (this.keys.shift) this.camera.position.y -= this.SPEED * delta;
     }
 }

@@ -1,61 +1,40 @@
-body { 
-    margin: 0; 
-    overflow: hidden; 
-    background-color: #87CEEB; 
-    font-family: sans-serif; 
-    user-select: none; 
+* { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+body { margin: 0; overflow: hidden; background-color: #87CEEB; font-family: sans-serif; }
+
+#ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-shadow: 1px 1px 2px black; }
+
+#instructions { color: white; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 10px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; z-index: 10; }
+#instructions h1 { margin-top: 0; color: #ff5555; }
+
+#hotbar { display: flex; gap: 5px; margin-bottom: 10px; z-index: 10; }
+.slot { width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 2px solid #555; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; position: relative; }
+.slot.active { border-color: #fff; background: rgba(255,255,255,0.2); }
+.slot img { width: 40px; height: 40px; image-rendering: pixelated; }
+.slot span { position: absolute; bottom: 2px; right: 5px; font-size: 10px; }
+
+/* ESTILOS CONTROLES MÓVILES */
+#mobile-controls { 
+    position: absolute; bottom: 80px; left: 0; width: 100%; 
+    display: flex; justify-content: space-between; 
+    padding: 0 20px; box-sizing: border-box; pointer-events: auto;
 }
 
-#ui { 
-    position: absolute; 
-    top: 0; left: 0; 
-    width: 100%; height: 100%; 
-    pointer-events: none; 
-    display: flex; 
-    flex-direction: column; 
-    justify-content: space-between; 
-    align-items: center; 
+#move-pad { display: grid; grid-template-columns: 50px 50px 50px; grid-template-rows: 50px 50px 50px; gap: 5px; }
+#btn-w { grid-column: 2; grid-row: 1; }
+#btn-a { grid-column: 1; grid-row: 2; }
+#btn-s { grid-column: 2; grid-row: 3; }
+#btn-d { grid-column: 3; grid-row: 2; }
+
+#height-pad { display: flex; flex-direction: column; gap: 10px; }
+
+.ctrl-btn { 
+    width: 50px; height: 50px; 
+    background: rgba(255, 255, 255, 0.3); 
+    border: 2px solid rgba(255, 255, 255, 0.5); 
+    border-radius: 10px; color: white; font-size: 20px; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
 }
 
-#crosshair { 
-    position: absolute; 
-    top: 50%; left: 50%; 
-    transform: translate(-50%, -50%); 
-    color: white; 
-    font-size: 24px; 
-    text-shadow: 1px 1px 2px black; 
-}
-
-#instructions { 
-    color: white; 
-    background: rgba(0,0,0,0.7); 
-    padding: 20px; 
-    border-radius: 10px; 
-    text-align: center; 
-    pointer-events: auto; 
-    cursor: pointer; 
-    border: 2px solid #555; 
-}
-
-#instructions h1 { 
-    margin-top: 0; 
-    color: #ff5555; 
-}
-
-#hotbar { 
-    display: flex; 
-    gap: 5px; 
-    margin-bottom: 10px; 
-}
-
-.slot { 
-    width: 50px; 
-    height: 50px; 
-    background: rgba(0,0,0,0.6); 
-    border: 2px solid #555; 
-}
-
-.slot.active { 
-    border-color: #fff; 
-    background: rgba(255,255,255,0.2); 
-}
+/* Cuando se mantiene presionado */
+.ctrl-btn:active { background: rgba(255, 255, 255, 0.6); }

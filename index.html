@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Redstone Sandbox</title>
     <script type="importmap">
         {
@@ -21,7 +21,7 @@
         
         <div id="instructions">
             <h1>Redstone Sandbox</h1>
-            <p>Haz clic para empezar<br>WASD: Mover | Espacio: Saltar | Doble Espacio: Volar<br>Clic Izq: Romper | Clic Der: Poner</p>
+            <p>PC: Haz clic para mirar<br>WASD: Mover | Space/Shift: Subir/Bajar<br>Celular: Usa los botones en pantalla</p>
         </div>
         
         <div id="hotbar">
@@ -31,6 +31,22 @@
             <div class="slot"></div>
             <div class="slot"></div>
             <div class="slot"></div>
+        </div>
+
+        <!-- CONTROLES MÓVILES -->
+        <div id="mobile-controls" class="no-look">
+            <!-- Control XZ -->
+            <div id="move-pad">
+                <button id="btn-w" class="ctrl-btn">W</button>
+                <button id="btn-a" class="ctrl-btn">A</button>
+                <button id="btn-s" class="ctrl-btn">S</button>
+                <button id="btn-d" class="ctrl-btn">D</button>
+            </div>
+            <!-- Control Y -->
+            <div id="height-pad">
+                <button id="btn-space" class="ctrl-btn">▲</button>
+                <button id="btn-shift" class="ctrl-btn">▼</button>
+            </div>
         </div>
     </div>
 
