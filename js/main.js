@@ -3,7 +3,7 @@ import { Player } from './player.js';
 import * as World from './world.js';
 import { createStoneTexture } from './textures/piedra.js';
 import { createRedstoneBlockTexture } from './textures/redstone.js';
-import { createDustOffTexture } from './textures/polvo_redstone.js'; // <-- NUEVA
+import { createDustOffTexture } from './textures/polvo_redstone.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
@@ -33,7 +33,7 @@ slots.forEach(slot => {
     const id = slot.getAttribute('data-block');
     if (id === "1") slot.querySelector('img').src = createStoneTexture().image.toDataURL();
     if (id === "2") slot.querySelector('img').src = createRedstoneBlockTexture().image.toDataURL();
-    if (id === "3") slot.querySelector('img').src = createDustOffTexture().image.toDataURL(); // Icono Polvo
+    if (id === "3") slot.querySelector('img').src = createDustOffTexture().image.toDataURL();
 });
 
 let selectedBlockType = World.BLOCKS.STONE;
@@ -78,13 +78,15 @@ document.addEventListener('mousedown', (e) => {
                 World.setBlock(bx, by, bz, World.BLOCKS.AIR);
             }
         } else if (e.button === 2) { 
-            const placePos = point.clone().add(normal.clone().multiplyScalar(0.01));
+            // EL FIX ESTÁ AQUÍ: 0.5 en lugar de 0.01
+            // Esto empuja el punto al centro de la casilla superior
+            const placePos = point.clone().add(normal.clone().multiplyScalar(0.5));
             const px = Math.floor(placePos.x);
             const py = Math.floor(placePos.y);
             const pz = Math.floor(placePos.z);
 
             if (World.getBlock(px, py, pz) === World.BLOCKS.AIR) {
-                World.setBlock(px, py, pz, selectedBlockType); // setBlock ahora verifica si es polvo
+                World.setBlock(px, py, pz, selectedBlockType);
             }
         }
     }

@@ -13,7 +13,6 @@ const WORLD_SIZE_Z = 100;
 const grid = new Array(WORLD_SIZE_Y).fill(null).map(() => new Array(WORLD_SIZE_X).fill(null).map(() => new Array(WORLD_SIZE_Z).fill(BLOCKS.AIR)));
 const powerGrid = new Array(WORLD_SIZE_Y).fill(null).map(() => new Array(WORLD_SIZE_X).fill(null).map(() => new Array(WORLD_SIZE_Z).fill(0)));
 
-// Sets para optimizar el cálculo de redstone (no escanear 500,000 bloques cada vez)
 const sourceBlocks = new Set();
 let poweredDusts = new Set();
 
@@ -21,10 +20,8 @@ let scene;
 const meshes = {};
 const blockGeo = new THREE.BoxGeometry(1, 1, 1);
 
-// Geometría plana para el polvo (0.1 de altura, subido 0.05)
 const dustGeo = new THREE.BoxGeometry(0.8, 0.1, 0.8);
 dustGeo.translate(0, 0.05, 0);
-// Engañar a Three.js para que el Raycast funcione como si fuera un bloque de 1x1x1
 dustGeo.boundingBox = new THREE.Box3(new THREE.Vector3(-0.5,-0.5,-0.5), new THREE.Vector3(0.5,0.5,0.5));
 dustGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0,0,0), Math.sqrt(3)/2);
 
@@ -56,21 +53,20 @@ export function setBlock(x, y, z, type) {
     
     const oldType = grid[y][x][z];
 
-    // REGLA DE COLOCACIÓN DEL POLVO: Solo si debajo hay un bloque sólido
+    // REGLA: El polvo solo se pone si debajo hay un bloque sólido
     if (type === BLOCKS.REDSTONE_DUST_OFF && !isSolid(getBlock(x, y - 1, z))) return;
 
     grid[y][x][z] = type;
 
-    // Manejar Sets de memoria
     const key = `${x},${y},${z}`;
     if (oldType === BLOCKS.REDSTONE_BLOCK) sourceBlocks.delete(key);
     if (type === BLOCKS.REDSTONE_BLOCK) sourceBlocks.add(key);
 
     if (oldType === BLOCKS.REDSTONE_DUST_ON) poweredDusts.delete(key);
 
-    powerGrid[y][x][z] = 0; // Resetear energía al modificar
+    powerGrid[y][x][z] = 0; 
     
-    updateRedstone(); // Recalcular toda la red
+    updateRedstone(); 
 }
 
 export function getPower(x, y, z) {
@@ -81,7 +77,7 @@ export function getPower(x, y, z) {
 export function getMeshes() { return Object.values(meshes); }
 export function getSelectionBox() { return selectionBox; }
 
-// --- ALGORITMO REDSTONE (BFS) ---
+// --- ALGORITMO REDSTONE ---
 function updateRedstone() {
     // 1. Apagar todo el polvo que estaba encendido
     poweredDusts.forEach(key => {
@@ -93,15 +89,16 @@ function updateRedstone() {
     });
     poweredDusts = new Set();
 
-    // 2. Iniciar BFS desde todas las fuentes (Bloques sólidos)
+    // 2. Iniciar BFS desde las fuentes
     const queue = [];
     sourceBlocks.forEach(key => {
         const [x, y, z] = key.split(',').map(Number);
-        powerGrid[y][x][z] = 15; // La fuente siempre vale 15
-        queue.push({ x, y, z, power: 15 });
+        powerGrid[y][x][z] = 15; 
+        // FIX DE ENERGÍA: Se inicia en 16 para que el primer vecino reciba 15
+        queue.push({ x, y, z, power: 16 }); 
     });
 
-    // 3. Propagar energía
+    // 3. Propagar
     while (queue.length > 0) {
         const curr = queue.shift();
         const neighbors = [
@@ -112,12 +109,11 @@ function updateRedstone() {
 
         for (let n of neighbors) {
             let type = getBlock(n.x, n.y, n.z);
-            // La energía SOLO pasa a través de polvo de redstone
             if (type === BLOCKS.REDSTONE_DUST_OFF || type === BLOCKS.REDSTONE_DUST_ON) {
-                let newPower = curr.power - 1; // Baja 1 nivel de fuerza (Comportamiento de MC)
+                let newPower = curr.power - 1; // Aquí baja a 15, 14, 13...
                 if (newPower > 0 && newPower > powerGrid[n.y][n.x][n.z]) {
                     powerGrid[n.y][n.x][n.z] = newPower;
-                    grid[n.y][n.x][n.z] = BLOCKS.REDSTONE_DUST_ON; // Encender visualmente
+                    grid[n.y][n.x][n.z] = BLOCKS.REDSTONE_DUST_ON;
                     poweredDusts.add(`${n.x},${n.y},${n.z}`);
                     queue.push({ x: n.x, y: n.y, z: n.z, power: newPower });
                 }
@@ -142,8 +138,6 @@ function buildMeshes() {
                 if (type === BLOCKS.AIR) continue;
 
                 let neighbors = [ getBlock(x+1,y,z), getBlock(x-1,y,z), getBlock(x,y+1,z), getBlock(x,y-1,z), getBlock(x,y,z+1), getBlock(x,y,z-1)];
-                
-                // El polvo siempre se muestra (porque es chiquito). Los bloques grandes se ocultan.
                 let isHidden = type !== BLOCKS.REDSTONE_DUST_OFF && type !== BLOCKS.REDSTONE_DUST_ON && neighbors.every(n => n !== BLOCKS.AIR);
                 if (isHidden) continue;
 
@@ -163,14 +157,13 @@ function buildMeshes() {
         [BLOCKS.REDSTONE_DUST_ON]: new THREE.MeshBasicMaterial({ map: createDustOnTexture() }) 
     };
 
-    // Mapa de geometrías (El polvo usa su geometría plana)
     const geoMap = {
         [BLOCKS.REDSTONE_DUST_OFF]: dustGeo,
         [BLOCKS.REDSTONE_DUST_ON]: dustGeo
     };
 
     for (let type in counts) {
-        let geo = geoMap[type] || blockGeo; // Si no es polvo, usa el cubo normal
+        let geo = geoMap[type] || blockGeo;
         let mesh = new THREE.InstancedMesh(geo, materials[type], counts[type]);
         let pos = positions[type];
         for (let i = 0; i < counts[type]; i++) {
