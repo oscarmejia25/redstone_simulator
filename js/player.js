@@ -7,8 +7,8 @@ export class Player {
         this.canvas = canvasElement;
         
         this.SPEED = 15;
-        this.isPaused = false; // Control de pausa global
-        this.isLocked = false; // Control de ratón en PC
+        this.isPaused = false; 
+        this.isLocked = false; 
         
         this.keys = { w: false, a: false, s: false, d: false, space: false, shift: false };
         this.euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -51,7 +51,7 @@ export class Player {
 
         document.addEventListener('pointerlockchange', () => {
             this.isLocked = document.pointerLockElement === this.canvas;
-            if (!this.isLocked) this.isPaused = true; // ESC pausa el juego
+            if (!this.isLocked) this.isPaused = true;
             this.uiElement.style.display = this.isLocked ? 'none' : 'flex';
         });
     }
@@ -65,10 +65,8 @@ export class Player {
         Object.entries(mapBtnToKey).forEach(([id, key]) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-
             const start = (e) => { e.stopPropagation(); this.keys[key] = true; };
             const end = () => this.keys[key] = false;
-
             btn.addEventListener('pointerdown', start);
             btn.addEventListener('pointerup', end);
             btn.addEventListener('pointerleave', end);
@@ -81,11 +79,9 @@ export class Player {
         let lastX = 0, lastY = 0;
 
         this.canvas.addEventListener('pointerdown', (e) => {
-            // Solo rotar si NO toca un botón (los botones tienen stopPropagation)
             if (!this.isPaused) {
                 isTouching = true;
-                lastX = e.clientX;
-                lastY = e.clientY;
+                lastX = e.clientX; lastY = e.clientY;
             }
         });
 
@@ -93,15 +89,12 @@ export class Player {
             if (!isTouching || this.isPaused) return;
             const deltaX = e.clientX - lastX;
             const deltaY = e.clientY - lastY;
-
             this.euler.setFromQuaternion(this.camera.quaternion);
             this.euler.y -= deltaX * 0.005;
             this.euler.x -= deltaY * 0.005;
             this.euler.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.euler.x));
             this.camera.quaternion.setFromEuler(this.euler);
-
-            lastX = e.clientX;
-            lastY = e.clientY;
+            lastX = e.clientX; lastY = e.clientY;
         });
 
         const stopTouch = () => isTouching = false;
@@ -110,36 +103,30 @@ export class Player {
     }
 
     update(delta) {
-        if (this.isPaused) return; // Si está en pausa, no hacer nada
+        if (this.isPaused) return;
 
-        // 1. MOVIMIENTO HORIZONTAL BASADO EN LA VISTA
-        // Extraer el ángulo de rotación horizontal (Yaw) de la cámara
+        // 1. Movimiento Horizontal basado en la vista (Trigonometría)
         const yaw = this.euler.y; 
-        
-        // Calcular los vectores forward (W/S) y right (A/D) usando trigonometría pura
         const forwardX = -Math.sin(yaw);
         const forwardZ = -Math.cos(yaw);
         const rightX = Math.cos(yaw);
         const rightZ = -Math.sin(yaw);
 
         let moveX = 0, moveZ = 0;
-
         if (this.keys.w) { moveX += forwardX; moveZ += forwardZ; }
         if (this.keys.s) { moveX -= forwardX; moveZ -= forwardZ; }
         if (this.keys.d) { moveX += rightX; moveZ += rightZ; }
         if (this.keys.a) { moveX -= rightX; moveZ -= rightZ; }
 
-        // Normalizar para evitar ir más rápido en diagonal
         if (moveX !== 0 || moveZ !== 0) {
             const length = Math.sqrt(moveX * moveX + moveZ * moveZ);
-            moveX /= length;
-            moveZ /= length;
+            moveX /= length; moveZ /= length;
         }
 
         this.camera.position.x += moveX * this.SPEED * delta;
         this.camera.position.z += moveZ * this.SPEED * delta;
 
-        // 2. MOVIMIENTO VERTICAL ESTRICTO
+        // 2. Movimiento Vertical directo
         if (this.keys.space) this.camera.position.y += this.SPEED * delta;
         if (this.keys.shift) this.camera.position.y -= this.SPEED * delta;
     }
