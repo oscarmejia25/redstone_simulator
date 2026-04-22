@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Redstone Sandbox</title>
+    
+    <!-- Fuente Pixelada estilo Minecraft -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    
     <script type="importmap">
         {
             "imports": {
@@ -19,18 +23,20 @@
     <div id="ui">
         <div id="crosshair">+</div>
         
-        <!-- Menú PC -->
+        <!-- Menú Principal Estilo Minecraft -->
         <div id="instructions">
-            <h1>Redstone Sandbox</h1>
-            <p>Haz clic para jugar<br>WASD: Mover | Space/Shift: Subir/Bajar<br>ESC para pausar</p>
+            <h1 class="mc-title">Redstone Sandbox</h1>
+            <p class="mc-subtitle">Haz clic para jugar</p>
+            <p class="mc-text">WASD: Mover | Space/Shift: Subir/Bajar<br>ESC para pausar</p>
         </div>
 
-        <!-- Menú Móvil -->
+        <!-- Menú de Pausa -->
         <div id="mobile-pause-menu">
-            <h1>PAUSA</h1>
-            <button id="btn-resume-mobile">REANUDAR</button>
+            <h1 class="mc-title">Juego en Pausa</h1>
+            <button id="btn-resume-mobile" class="mc-button">Volver al Juego</button>
         </div>
 
+        <!-- Barra de Objetos (Hotbar) -->
         <div id="hotbar">
             <div class="slot"></div>
             <div class="slot"></div>
@@ -38,20 +44,23 @@
             <div class="slot"></div>
             <div class="slot"></div>
             <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
         </div>
 
-        <!-- Controles Móvil -->
+        <!-- Controles Móvil (Estilo Bedrock) -->
         <div id="mobile-controls">
             <div id="move-pad">
-                <button id="btn-w" class="ctrl-btn">W</button>
-                <button id="btn-a" class="ctrl-btn">A</button>
-                <button id="btn-s" class="ctrl-btn">S</button>
-                <button id="btn-d" class="ctrl-btn">D</button>
+                <button id="btn-w" class="ctrl-btn">▲</button>
+                <button id="btn-a" class="ctrl-btn">◄</button>
+                <button id="btn-s" class="ctrl-btn">▼</button>
+                <button id="btn-d" class="ctrl-btn">►</button>
             </div>
             <div id="right-mobile-pad">
-                <button id="btn-pause" class="ctrl-btn">❚❚</button>
-                <button id="btn-space" class="ctrl-btn">▲</button>
-                <button id="btn-shift" class="ctrl-btn">▼</button>
+                <button id="btn-pause" class="ctrl-btn">⏸</button>
+                <button id="btn-space" class="ctrl-btn">⬆</button>
+                <button id="btn-shift" class="ctrl-btn">⬇</button>
             </div>
         </div>
     </div>

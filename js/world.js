@@ -6,32 +6,45 @@ let scene;
 export function initWorld(sceneRef) {
     scene = sceneRef;
 
-    // Cargador de texturas
     const loader = new THREE.TextureLoader();
-    loader.crossOrigin = "Anonymous"; // Por si acaso la URL bloquea cosas locales
-    
-    // URL de la textura que pasaste
-    const grassUrl = 'https://thumbs.dreamstime.com/b/fondo-de-la-textura-hierba-del-verde-retro-cuadrado-patr%C3%B3n-pasto-p%C3%ADxeles-c%C3%A9sped-abstracto-paisaje-bits-juego-pantalla-231999339.jpg?w=768';
-    
-    const texture = loader.load(grassUrl);
-    
-    // Configuración vital para que se vea como Minecraft (Pixeles duros)
-    texture.magFilter = THREE.NearestFilter;
-    texture.minFilter = THREE.NearestFilter;
-    texture.colorSpace = THREE.SRGBColorSpace;
+    loader.crossOrigin = "Anonymous";
 
-    // Geometría y Material
+    // URLs de texturas Vanilla de Minecraft (Alta calidad)
+    const grassTopUrl = 'https://raw.githubusercontent.com/Southender/Minecraft-Textures/main/minecraft/textures/block/grass_block_top.png';
+    const grassSideUrl = 'https://raw.githubusercontent.com/Southender/Minecraft-Textures/main/minecraft/textures/block/grass_block_side.png';
+    const dirtUrl = 'https://raw.githubusercontent.com/Southender/Minecraft-Textures/main/minecraft/textures/block/dirt.png';
+
+    // Cargar las 3 texturas
+    const topTex = loader.load(grassTopUrl);
+    const sideTex = loader.load(grassSideUrl);
+    const dirtTex = loader.load(dirtUrl);
+
+    // Configurar para que se vean pixeladas (Estilo MC)
+    [topTex, sideTex, dirtTex].forEach(tex => {
+        tex.magFilter = THREE.NearestFilter;
+        tex.minFilter = THREE.NearestFilter;
+        tex.colorSpace = THREE.SRGBColorSpace;
+    });
+
+    // Crear materiales para las 6 caras del bloque
+    // Orden en Three.js: [+X, -X, +Y (Arriba), -Y (Abajo), +Z, -Z]
+    const blockMaterials = [
+        new THREE.MeshLambertMaterial({ map: sideTex }), // Derecha
+        new THREE.MeshLambertMaterial({ map: sideTex }), // Izquierda
+        new THREE.MeshLambertMaterial({ map: topTex }),  // Arriba (Verde)
+        new THREE.MeshLambertMaterial({ map: dirtTex }), // Abajo (Tierra)
+        new THREE.MeshLambertMaterial({ map: sideTex }), // Frente
+        new THREE.MeshLambertMaterial({ map: sideTex })  // Atrás
+    ];
+
     const blockGeo = new THREE.BoxGeometry(1, 1, 1);
-    const blockMat = new THREE.MeshLambertMaterial({ map: texture });
-
-    // InstancedMesh (Renderizar 10,000 bloques de una sola vez sin lag)
-    const floorMesh = new THREE.InstancedMesh(blockGeo, blockMat, WORLD_SIZE * WORLD_SIZE);
+    const floorMesh = new THREE.InstancedMesh(blockGeo, blockMaterials, WORLD_SIZE * WORLD_SIZE);
+    
     const dummy = new THREE.Object3D();
     let index = 0;
 
     for (let x = 0; x < WORLD_SIZE; x++) {
         for (let z = 0; z < WORLD_SIZE; z++) {
-            // Y = -0.5 para que la cara superior del cubo quede exactamente en Y = 0
             dummy.position.set(x + 0.5, -0.5, z + 0.5);
             dummy.updateMatrix();
             floorMesh.setMatrixAt(index, dummy.matrix);
@@ -43,6 +56,5 @@ export function initWorld(sceneRef) {
     scene.add(floorMesh);
 }
 
-// Funciones vacías por ahora, las usaremos cuando añadamos bloques
 export function getMeshes() { return []; }
 export function getSelectionBox() { return null; }

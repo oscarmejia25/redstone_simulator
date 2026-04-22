@@ -1,22 +1,91 @@
-* { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
-body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
+* { 
+    touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; 
+    image-rendering: pixelated; /* Fuerza todo a verse pixelado */
+}
 
-#ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; align-items: center; }
-#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 24px; text-shadow: 2px 2px 4px black; z-index: 5; }
+body { 
+    margin: 0; overflow: hidden; background-color: #000; 
+    font-family: 'Press Start 2P', cursive; 
+}
 
-#instructions { color: white; background: rgba(0,0,0,0.8); padding: 30px; border-radius: 15px; text-align: center; pointer-events: auto; cursor: pointer; border: 2px solid #555; z-index: 20; }
-#instructions h1 { margin-top: 0; color: #ff5555; }
+#ui { 
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+    pointer-events: none; display: flex; flex-direction: column; 
+    justify-content: space-between; align-items: center; 
+}
 
-#mobile-pause-menu { display: none; color: white; background: rgba(0,0,0,0.8); padding: 40px; border-radius: 15px; text-align: center; z-index: 20; flex-direction: column; align-items: center; gap: 20px; }
-#mobile-pause-menu h1 { margin: 0; color: #ff5555; }
-#btn-resume-mobile { padding: 15px 30px; font-size: 20px; background: #555; color: white; border: 2px solid #fff; border-radius: 10px; pointer-events: auto; cursor: pointer; }
+/* --- CROSSHAIR --- */
+#crosshair { 
+    position: absolute; top: 50%; left: 50%; 
+    transform: translate(-50%, -50%); 
+    color: white; font-size: 30px; 
+    mix-blend-mode: difference; /* Funciona bien en claros y oscuros */
+    z-index: 50; pointer-events: none;
+}
 
-#hotbar { display: flex; gap: 5px; margin-bottom: 15px; z-index: 10; }
-.slot { width: 50px; height: 50px; background: rgba(0,0,0,0.6); border: 2px solid #555; }
+/* --- MENÚS (Fondo de Tierra) --- */
+#instructions, #mobile-pause-menu {
+    color: white; 
+    padding: 40px; 
+    border: 4px solid #1a1a1a; 
+    outline: 2px solid #555; 
+    box-shadow: inset 0 0 30px rgba(0,0,0,0.8);
+    text-align: center; 
+    z-index: 20; 
+    /* Textura de tierra de fondo */
+    background-color: #8B8B8B; 
+    background-image: url('https://raw.githubusercontent.com/Southender/Minecraft-Textures/main/minecraft/textures/block/dirt.png');
+    background-size: 64px 64px; 
+    image-rendering: pixelated;
+}
 
-#mobile-controls { position: absolute; bottom: 80px; left: 0; width: 100%; display: none; justify-content: space-between; padding: 0 20px; box-sizing: border-box; pointer-events: auto; }
+#instructions { cursor: pointer; pointer-events: auto; }
+#mobile-pause-menu { display: none; flex-direction: column; align-items: center; gap: 20px; pointer-events: auto; }
 
-#move-pad { display: grid; grid-template-columns: 50px 50px 50px; grid-template-rows: 50px 50px 50px; gap: 5px; }
+.mc-title { margin: 0 0 20px 0; color: #FFFF00; text-shadow: 2px 2px 0px #3F3F00; font-size: 24px; line-height: 1.4; }
+.mc-subtitle { color: #AAAAAA; font-size: 12px; margin-bottom: 20px; }
+.mc-text { color: #FFFFFF; font-size: 10px; line-height: 2; text-shadow: 1px 1px 0px #3F3F3F; }
+
+.mc-button { 
+    font-family: 'Press Start 2P', cursive;
+    padding: 15px 30px; font-size: 14px; background: #727272; 
+    color: white; border: 3px solid #000; outline: 2px solid #aaa;
+    cursor: pointer; text-shadow: 2px 2px 0px #3F3F3F;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+}
+.mc-button:active { background: #555555; }
+
+/* --- HOTBAR (Inventario Inferior) --- */
+#hotbar { 
+    display: flex; gap: 0px; margin-bottom: 10px; z-index: 10;
+    background-color: #8B8B8B;
+    background-image: url('https://raw.githubusercontent.com/Southender/Minecraft-Textures/main/minecraft/textures/block/dirt.png');
+    background-size: 32px 32px;
+    border: 4px solid #2C2C2C;
+    outline: 2px solid #555;
+    padding: 2px;
+    image-rendering: pixelated;
+}
+
+.slot { 
+    width: 40px; height: 40px; 
+    background: #8B8B8B; 
+    border: 2px solid #373737;
+    outline: 1px solid #555;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.6);
+}
+
+/* --- CONTROLES MÓVIL --- */
+#mobile-controls { 
+    position: absolute; bottom: 70px; left: 0; width: 100%; 
+    display: none; justify-content: space-between; 
+    padding: 0 20px; box-sizing: border-box; pointer-events: auto; 
+}
+
+#move-pad { 
+    display: grid; grid-template-columns: 50px 50px 50px; 
+    grid-template-rows: 50px 50px 50px; gap: 4px; 
+}
 #btn-w { grid-column: 2; grid-row: 1; }
 #btn-a { grid-column: 1; grid-row: 2; }
 #btn-s { grid-column: 2; grid-row: 3; }
@@ -24,10 +93,17 @@ body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-se
 
 #right-mobile-pad { display: flex; flex-direction: column; gap: 10px; align-items: center; }
 
-.ctrl-btn { width: 50px; height: 50px; background: rgba(255, 255, 255, 0.3); border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 10px; color: white; font-size: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
-.ctrl-btn:active { background: rgba(255, 255, 255, 0.6); }
+.ctrl-btn { 
+    width: 50px; height: 50px; 
+    background: rgba(100, 100, 100, 0.6); 
+    border: 2px solid rgba(0, 0, 0, 0.8); 
+    color: white; font-size: 20px; font-weight: bold; 
+    display: flex; align-items: center; justify-content: center; 
+    text-shadow: 1px 1px 2px black;
+}
+.ctrl-btn:active { background: rgba(255, 255, 255, 0.4); }
 
-/* Magia CSS: Ocultar móviles en PC, mostrar en Celular */
+/* Adaptación PC vs Móvil */
 @media (hover: hover) and (pointer: fine) {
     #mobile-controls, #mobile-pause-menu { display: none !important; }
 }
