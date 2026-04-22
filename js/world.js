@@ -15,7 +15,7 @@ const powerGrid = new Array(WORLD_SIZE_Y).fill(null).map(() => new Array(WORLD_S
 const sourceBlocks = new Set();
 let poweredDusts = new Set();
 
-// MAPA DE SPRITES: Guarda las calcomanías del polvo para modificarlas en tiempo real
+// MAPA DE SPRITES
 const dustSprites = new Map();
 
 let scene;
@@ -67,7 +67,7 @@ export function setBlock(x, y, z, type) {
     updateRedstone(); 
 }
 
-// --- GESTIÓN DE SPRITES (Calcomanías dinámicas) ---
+// --- GESTIÓN DE SPRITES ---
 function createDustSprite(x, y, z) {
     const canvas = document.createElement('canvas');
     canvas.width = 16; canvas.height = 16;
@@ -79,9 +79,12 @@ function createDustSprite(x, y, z) {
     const sprite = new THREE.Sprite(material);
     
     // Posición flotando sobre la cara superior del bloque
-    sprite.position.set(x + 0.5, y + 0.1, z + 0.5);
+    sprite.position.set(x + 0.5, y + 0.11, z + 0.5);
     sprite.scale.set(0.99, 0.99, 0.99);
-    sprite.userData.blockType = BLOCKS.REDSTONE_DUST_OFF; // Para que el raycast sepa qué es
+    sprite.userData.blockType = BLOCKS.REDSTONE_DUST_OFF;
+    
+    // GUARDAR COORDENADAS REALES DE LA CUADRÍCULA (Para el Raycast)
+    sprite.userData.gridPos = { x, y, z };
     
     scene.add(sprite);
     dustSprites.set(`${x},${y},${z}`, { sprite, canvas, texture });
@@ -100,50 +103,44 @@ function removeDustSprite(x, y, z) {
     }
 }
 
-// --- DIBUJO DEL POLVO (Caminos y Números) ---
+// --- DIBUJO DEL POLVO ESTILO MINECRAFT ---
 function updateDustVisuals(x, y, z) {
     const key = `${x},${y},${z}`;
     const dust = dustSprites.get(key);
     if (!dust) return;
 
     const power = powerGrid[y][x][z];
-    const up = isDust(x, y + 1, z);
-    const down = isDust(x, y - 1, z);
-    const left = isDust(x - 1, y, z);
-    const right = isDust(x + 1, y, z);
-
-    const ctx = dust.canvas.getContext('2d');
-    ctx.clearRect(0, 0, 16, 16); // Limpiar lienzo
-
-    // Color según energía
+    
+    // Colores exactos de MC
     const color = power > 0 ? '#ff0000' : '#4a0000';
+    const ctx = dust.canvas.getContext('2d');
+    ctx.clearRect(0, 0, 16, 16); 
+
     ctx.fillStyle = color;
 
-    // Cruz central base (siempre existe)
-    ctx.fillRect(7, 6, 2, 4); // Vertical
-    ctx.fillRect(6, 7, 4, 2); // Horizontal
+    // 1. CENTRO CUADRADO DE 4x4 (Coordenadas 6,6 a 9,9)
+    ctx.fillRect(6, 6, 4, 4);
 
-    // Extender líneas si hay vecino (El caminito)
-    if (up) ctx.fillRect(7, 0, 2, 6);
-    if (down) ctx.fillRect(7, 10, 2, 6);
-    if (left) ctx.fillRect(0, 7, 6, 2);
-    if (right) ctx.fillRect(10, 7, 6, 2);
+    // 2. BRAZOS CONECTORES (Se extienden hasta el borde del canvas 16x16)
+    // Si hay vecino, dibujamos una línea de 2 píxeles de ancho/largo desde el centro hasta el borde
+    if (isDust(x, y, z + 1)) ctx.fillRect(7, 0, 2, 6);   // Arriba (Z+)
+    if (isDust(x, y, z - 1)) ctx.fillRect(7, 10, 2, 6);  // Abajo (Z-)
+    if (isDust(x + 1, y, z)) ctx.fillRect(10, 7, 6, 2);  // Derecha (X+)
+    if (isDust(x - 1, y, z)) ctx.fillRect(0, 7, 6, 2);   // Izquierda (X-)
 
-    // Dibujar número de energía (Blanco semi-transparente)
+    // 3. NÚMERO DE ENERGÍA (Si está encendido)
     if (power > 0) {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         ctx.font = 'bold 8px Arial';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(power.toString(), 8, 8);
-        
-        // Actualizar tipo para la caja de selección
         dust.sprite.userData.blockType = BLOCKS.REDSTONE_DUST_ON;
     } else {
         dust.sprite.userData.blockType = BLOCKS.REDSTONE_DUST_OFF;
     }
 
-    dust.texture.needsUpdate = true; // Avisar a Three.js que el dibujo cambió
+    dust.texture.needsUpdate = true; 
 }
 
 export function getPower(x, y, z) {
@@ -152,7 +149,6 @@ export function getPower(x, y, z) {
 }
 
 export function getMeshes() { 
-    // Unificar los bloques sólidos y los sprites del polvo para el Raycast
     return [...Object.values(meshes), ...Array.from(dustSprites.values()).map(d => d.sprite)]; 
 }
 export function getSelectionBox() { return selectionBox; }
@@ -195,14 +191,13 @@ function updateRedstone() {
         }
     }
 
-    // ACTUALIZAR DIBUJO DE TODOS LOS SPRITES DEL MUNDO
-    // Esto hace que las líneas se conecten y los números cambien
+    // ACTUALIZAR DIBUJO DE TODOS LOS SPRITES
     dustSprites.forEach((dust, key) => {
         const [x, y, z] = key.split(',').map(Number);
         updateDustVisuals(x, y, z);
     });
 
-    buildMeshes(); // Reconstruir bloques sólidos (piedra/pasto)
+    buildMeshes();
 }
 
 // --- RENDERIZADO DE BLOQUES SÓLIDOS ---
@@ -216,7 +211,6 @@ function buildMeshes() {
         for (let x = 0; x < WORLD_SIZE_X; x++) {
             for (let z = 0; z < WORLD_SIZE_Z; z++) {
                 let type = grid[y][x][z];
-                // Ignorar aire y polvo (el polvo ya se dibujó con Sprites)
                 if (type === BLOCKS.AIR || type === BLOCKS.REDSTONE_DUST_OFF || type === BLOCKS.REDSTONE_DUST_ON) continue;
 
                 let neighbors = [ getBlock(x+1,y,z), getBlock(x-1,y,z), getBlock(x,y+1,z), getBlock(x,y-1,z), getBlock(x,y,z+1), getBlock(x,y,z-1)];

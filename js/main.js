@@ -3,7 +3,7 @@ import { Player } from './player.js';
 import * as World from './world.js';
 import { createStoneTexture } from './textures/piedra.js';
 import { createRedstoneBlockTexture } from './textures/redstone.js';
-import { createDustOffTexture } from './textures/polvo_redstone.js'; // Solo para el icono de la barra
+import { createDustOffTexture } from './textures/polvo_redstone.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
@@ -27,7 +27,6 @@ const mobilePauseMenu = document.getElementById('mobile-pause-menu');
 if (document.getElementById('btn-pause')) document.getElementById('btn-pause').addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = true; mobilePauseMenu.style.display = 'flex'; });
 if (document.getElementById('btn-resume-mobile')) document.getElementById('btn-resume-mobile').addEventListener('pointerdown', (e) => { e.stopPropagation(); player.isPaused = false; mobilePauseMenu.style.display = 'none'; });
 
-// --- ICONOS Y SELECCIÓN ---
 const slots = document.querySelectorAll('.slot[data-block]');
 slots.forEach(slot => {
     const id = slot.getAttribute('data-block');
@@ -51,7 +50,6 @@ window.addEventListener('keydown', (e) => {
     if(e.key === '3') updateHotbar(2);
 });
 
-// --- RAYCASTING ---
 const raycaster = new THREE.Raycaster();
 raycaster.far = 40;
 const center = new THREE.Vector2(0, 0);
@@ -67,13 +65,12 @@ document.addEventListener('mousedown', (e) => {
         const point = intersect.point.clone();
         const normal = intersect.face.normal;
 
-        // Calcular qué bloque estamos mirando
-        // Para los Sprites (polvo) no hay "cara", así que usamos su posición directa
         let bx, by, bz;
         if (intersect.object.isSprite) {
-            bx = Math.floor(intersect.object.position.x);
-            by = Math.floor(intersect.object.position.y);
-            bz = Math.floor(intersect.object.position.z);
+            // LEER LAS COORDENADAS REALES GUARDADAS EN EL SPRITE
+            bx = intersect.object.userData.gridPos.x;
+            by = intersect.object.userData.gridPos.y;
+            bz = intersect.object.userData.gridPos.z;
         } else {
             const blockPos = point.clone().sub(normal.clone().multiplyScalar(0.01));
             bx = Math.floor(blockPos.x);
@@ -120,10 +117,15 @@ function animate() {
             } else {
                 let px, py, pz;
                 if (hitMesh.isSprite) {
-                    px = hitMesh.position.x; py = hitMesh.position.y; pz = hitMesh.position.z;
+                    // Poner la caja en el centro del BLOQUE (no donde flota el sprite)
+                    px = hitMesh.userData.gridPos.x + 0.5;
+                    py = hitMesh.userData.gridPos.y + 0.5;
+                    pz = hitMesh.userData.gridPos.z + 0.5;
                 } else {
                     const p = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.01));
-                    px = Math.floor(p.x) + 0.5; py = Math.floor(p.y) + 0.5; pz = Math.floor(p.z) + 0.5;
+                    px = Math.floor(p.x) + 0.5; 
+                    py = Math.floor(p.y) + 0.5; 
+                    pz = Math.floor(p.z) + 0.5;
                 }
                 selBox.position.set(px, py, pz);
                 selBox.visible = true;
